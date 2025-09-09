@@ -77,7 +77,7 @@ async def birthday_check():
         if birthday == today_str and user_id not in already_wished_today:
             member = guild.get_member(int(user_id))
             if member:
-                await channel.send(f"Happy Birthday {member.mention}! 🎂🎉")
+                await channel.send(f"It's a special day for {member.mention} 🥳 May your year be full of joy, laughter, and warm hugs 🤗 ~ from Hugs without Borders")
                 already_wished_today.add(user_id)
 
 # -----------------------------
@@ -93,7 +93,7 @@ async def setbirthday(ctx, month: int, day: int):
 
     birthday_str = f"{month:02d}-{day:02d}"
     await set_birthday(user_id, birthday_str)
-    await ctx.send(f"Your birthday has been set to {birthday_str} 🎉")
+    await ctx.send(f"Your birthday is saved on our calendar, {birthday_str} 📅 Can't wait to share the joy with you!")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -102,7 +102,7 @@ async def setuserbirthday(ctx, member: discord.Member, month: int, day: int):
     user_id = str(member.id)
     birthday_str = f"{month:02d}-{day:02d}"
     await set_birthday(user_id, birthday_str)
-    await ctx.send(f"{member.mention}'s birthday has been set to {birthday_str} 🎉")
+    await ctx.send(f"{member.display_name}'s birthday has been set to {birthday_str} 🎉")
 
 # -----------------------------
 # Bot events
