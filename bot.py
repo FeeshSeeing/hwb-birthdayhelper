@@ -50,4 +50,4 @@ async def birthday_check():
 
 
 # Run bot
-bot.run(TOKEN)
+client.run(TOKEN)
