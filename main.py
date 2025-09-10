@@ -6,8 +6,6 @@ from dotenv import load_dotenv
 import datetime
 import aiosqlite
 import calendar
-import threading
-from flask import Flask
 
 # -----------------------------
 # Load environment variables
@@ -20,21 +18,6 @@ CHECK_HOUR = int(os.getenv("CHECK_HOUR", 9))  # default 9 AM
 MOD_ROLE_ID = int(os.getenv("MOD_ROLE_ID", 0))
 BIRTHDAY_ROLE_ID = int(os.getenv("BIRTHDAY_ROLE_ID"))
 GUILD = discord.Object(id=GUILD_ID)
-
-
-# ---- Flask server ----
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "✅ Bot is running on Render!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 5000))  # Render sets $PORT
-    app.run(host="0.0.0.0", port=port)
-
-# Start Flask webserver in background thread
-threading.Thread(target=run_web).start()
 
 # -----------------------------
 # Discord intents
@@ -406,11 +389,6 @@ async def testbirthday(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     await birthday_check(force=True)
     await interaction.followup.send("✅ Birthday check completed.", ephemeral=True)
-
-
-@bot.command()
-async def ping(ctx):
-    await ctx.send("Pong!")
 
 # -----------------------------
 # Run the bot
