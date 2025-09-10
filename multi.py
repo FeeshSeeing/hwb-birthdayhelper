@@ -32,7 +32,6 @@ DB_FILE = "birthdays.db"
 # -----------------------------
 async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
-        # Guild configuration table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS guild_config (
                 guild_id TEXT PRIMARY KEY,
@@ -42,8 +41,6 @@ async def init_db():
                 check_hour INTEGER DEFAULT 9
             )
         """)
-
-        # Birthdays table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS birthdays (
                 guild_id TEXT NOT NULL,
@@ -52,8 +49,6 @@ async def init_db():
                 PRIMARY KEY(guild_id, user_id)
             )
         """)
-
-        # Config for pinned message IDs
         await db.execute("""
             CREATE TABLE IF NOT EXISTS config (
                 key TEXT PRIMARY KEY,
@@ -95,8 +90,7 @@ async def get_birthdays(guild_id: str):
 async def set_birthday(guild_id: str, user_id: str, birthday_str: str):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
-            "INSERT INTO birthdays (guild_id, user_id, birthday) VALUES (?, ?, ?) "
-            "ON CONFLICT(guild_id, user_id) DO UPDATE SET birthday = excluded.birthday",
+            "INSERT OR REPLACE INTO birthdays (guild_id, user_id, birthday) VALUES (?, ?, ?)",
             (guild_id, user_id, birthday_str)
         )
         await db.commit()
@@ -150,16 +144,13 @@ async def update_pinned_birthday_message(guild: discord.Guild):
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
         return
-
     channel = guild.get_channel(guild_config["channel_id"])
     if not channel:
         return
-
     birthdays = await get_birthdays(str(guild.id))
     if not birthdays:
         content = "📂 Oops! There are no birthdays in the database yet."
     else:
-        # Sort names A->Z
         sorted_rows = []
         for user_id_str, birthday in birthdays:
             try:
@@ -174,28 +165,24 @@ async def update_pinned_birthday_message(guild: discord.Guild):
         for _, name, birthday in sorted_rows:
             content += f"✦ {name}: {format_birthday_display(birthday)}\n"
 
-    # Fetch pinned message
     async with aiosqlite.connect(DB_FILE) as db:
         async with db.execute(
             "SELECT value FROM config WHERE key=?",
             (f"pinned_birthday_msg_{guild.id}",)
         ) as cursor:
             result = await cursor.fetchone()
-
         pinned_msg = None
         if result:
             try:
                 pinned_msg = await channel.fetch_message(int(result[0]))
             except discord.NotFound:
                 pinned_msg = None
-
         if pinned_msg:
             await pinned_msg.edit(content=content)
         else:
             pinned_msg = await channel.send(content)
             if channel.permissions_for(guild.me).manage_messages:
                 await pinned_msg.pin()
-
         await db.execute(
             "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
             (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
@@ -221,17 +208,18 @@ async def birthday_check():
                 channel = guild.get_channel(config["channel_id"])
                 if not channel:
                     continue
-
                 today_str = now.strftime("%m-%d")
                 birthdays = await get_birthdays(guild_id)
                 if guild_id not in already_wished_today:
                     already_wished_today[guild_id] = set()
-
                 for user_id, birthday in birthdays:
                     if birthday == today_str and user_id not in already_wished_today[guild_id]:
                         member = guild.get_member(int(user_id))
                         if member:
-                            await channel.send(f"Happy Birthday, {member.mention}! 🎂💖")
+                            await channel.send(
+                                f"Happy Birthday, {member.mention}! 🎈\n"
+                                f"From all of us at {guild.name}, sending you lots of love today 💖🎂"
+                                )
                             if config["birthday_role_id"]:
                                 role = guild.get_role(config["birthday_role_id"])
                                 if role and role not in member.roles:
@@ -258,7 +246,7 @@ async def setbirthday(interaction: discord.Interaction, day: int, month: int):
     await update_pinned_birthday_message(interaction.guild)
     human_readable = format_birthday_display(birthday_str)
     await interaction.followup.send(
-        f"All done 💌 Your special day is marked as {human_readable}. Hugs are on the way!", 
+        f"All done 💌 Your special day is marked as {human_readable}. Hugs are on the way!",
         ephemeral=True
     )
 
@@ -359,8 +347,7 @@ async def importbirthdays(interaction: discord.Interaction, channel: discord.Tex
                 day, month = result
                 birthday_str = f"{month:02d}-{day:02d}"
                 await db.execute(
-                    "INSERT INTO birthdays (guild_id, user_id, birthday) VALUES (?, ?, ?) "
-                    "ON CONFLICT(guild_id, user_id) DO UPDATE SET birthday = excluded.birthday",
+                    "INSERT OR REPLACE INTO birthdays (guild_id, user_id, birthday) VALUES (?, ?, ?)",
                     (str(interaction.guild.id), str(user_id), birthday_str)
                 )
                 updated_count += 1
@@ -372,9 +359,6 @@ async def importbirthdays(interaction: discord.Interaction, channel: discord.Tex
     except Exception as e:
         await interaction.followup.send(f"🚨 Error importing birthdays: {e}", ephemeral=True)
 
-# -----------------------------
-# Export birthdays to text file
-# -----------------------------
 @bot.tree.command(name="exportbirthdays", description="Export birthdays to a text file")
 async def exportbirthdays(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -393,9 +377,6 @@ async def exportbirthdays(interaction: discord.Interaction):
         f.write(file_content)
     await interaction.followup.send(file=discord.File(file_name), ephemeral=True)
 
-# -----------------------------
-# Test birthday check
-# -----------------------------
 @bot.tree.command(name="testbirthday", description="Force birthday message check")
 async def testbirthday(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -403,7 +384,7 @@ async def testbirthday(interaction: discord.Interaction):
     await interaction.followup.send("✅ Birthday check completed.", ephemeral=True)
 
 # -----------------------------
-# Setup command
+# Setup command with guild sync
 # -----------------------------
 @bot.tree.command(name="setup", description="Setup the bot for your server")
 @app_commands.describe(
@@ -420,6 +401,7 @@ async def setup(interaction: discord.Interaction,
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("Only admins can run this.", ephemeral=True)
         return
+    await interaction.response.defer(ephemeral=True)
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
             """
@@ -439,18 +421,27 @@ async def setup(interaction: discord.Interaction,
         )
         await db.commit()
     await update_pinned_birthday_message(interaction.guild)
-    await interaction.response.send_message(f"✅ Bot configured! Birthdays will post in {channel.mention}", ephemeral=True)
+    # Sync commands for this guild immediately
+    try:
+        await bot.tree.sync(guild=interaction.guild)
+    except Exception as e:
+        print(f"Failed to sync commands for {interaction.guild.name}: {e}")
+    await interaction.followup.send(f"✅ Bot configured! Birthdays will post in {channel.mention}", ephemeral=True)
 
 # -----------------------------
 # Events
 # -----------------------------
 @bot.event
 async def on_guild_join(guild: discord.Guild):
-    default_channel = next((c for c in guild.text_channels if c.permissions_for(guild.me).send_messages), None)
+    default_channel = next(
+        (c for c in guild.text_channels if c.permissions_for(guild.me).send_messages),
+        None
+    )
     if default_channel:
         await default_channel.send(
-            "👋 Hello! Thanks for inviting me! To get started, please run `/setup` to configure the bot for this server."
+            "👋 Hello! Thanks for inviting me! Run `/setup` to configure the bot."
         )
+    # Sync commands for this guild
     try:
         await bot.tree.sync(guild=guild)
     except Exception as e:
@@ -461,11 +452,11 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
     await init_db()
     birthday_check.start()
-    # Sync commands for all guilds to appear instantly
+    # Sync commands for all guilds
     for guild in bot.guilds:
         try:
             await bot.tree.sync(guild=guild)
-            print(f"Synced commands for {guild.name}")
+            print(f"Commands synced for {guild.name}")
         except Exception as e:
             print(f"Failed to sync commands for {guild.name}: {e}")
 
@@ -473,4 +464,3 @@ async def on_ready():
 # Run bot
 # -----------------------------
 bot.run(TOKEN)
-
