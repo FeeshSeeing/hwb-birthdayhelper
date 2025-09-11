@@ -17,11 +17,29 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+
 @bot.event
 async def on_ready():
     logger.info(f"✅ Logged in as {bot.user}")
     await init_db()
     bot.loop.create_task(birthday_check_loop(bot))  # background task
+
+    # Optional tiny delay to ensure bot.guilds is populated
+    await asyncio.sleep(1)
+
+    # for guild in bot.guilds:
+    #     # Clear old guild commands
+    #     await bot.tree.clear_commands(guild=guild)
+    #     logger.info(f"🗑️ Cleared old commands for {guild.name}")
+
+    #     # Sync updated commands for this guild
+    #     try:
+    #         await bot.tree.sync(guild=guild)
+    #         logger.info(f"🔄 Synced new commands for {guild.name}")
+    #     except Exception as e:
+    #         logger.error(f"Failed to sync commands for {guild.name}: {e}")
+
+    # --- Backup original snippet ---
     for guild in bot.guilds:
         try:
             await bot.tree.sync(guild=guild)

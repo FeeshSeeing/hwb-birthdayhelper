@@ -6,11 +6,24 @@ from database import set_birthday, delete_birthday, get_birthdays, get_guild_con
 from utils import parse_day_month_input, format_birthday_display, update_pinned_birthday_message
 from logger import logger
 
-def is_admin_or_mod(member: discord.Member, mod_role_id: int = None):
+def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> bool:
+    """
+    Check if a member is an administrator or has the optional moderator role.
+    
+    - If mod_role_id is None, only administrators are allowed.
+    - If mod_role_id is set, admins or members with that role are allowed.
+    """
+    # Always allow administrators
     if member.guild_permissions.administrator:
         return True
+
+    # If a mod role is defined, allow members with that role
     if mod_role_id:
-        return any(role.id == mod_role_id for role in member.roles)
+        for role in member.roles:
+            if role.id == mod_role_id:
+                return True
+
+    # Otherwise, not allowed
     return False
 
 class Admin(commands.Cog):

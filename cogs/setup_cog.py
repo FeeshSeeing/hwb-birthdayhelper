@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiosqlite
 from utils import update_pinned_birthday_message
-
+#from typing import Optional
 
 DB_FILE = "birthdays.db"
 
@@ -12,25 +12,38 @@ class SetupCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="setup", description="Setup the bot for your server")
+    # Only ONE @app_commands.command decorator!
+    @app_commands.command(
+        name="setup",
+        description="Setup the bot for your server"
+    )
     @app_commands.describe(
         channel="Channel to post birthdays",
-        birthday_role="Role to assign on birthdays",
-        mod_role="Moderator role",
+        birthday_role="Role to assign on birthdays (optional)",
+        mod_role="Moderator role (optional, only admins otherwise)",
         check_hour="Hour to send birthday messages (0-23)"
     )
-    async def setup(self, interaction: discord.Interaction,
-                    channel: discord.TextChannel,
-                    birthday_role: discord.Role,
-                    mod_role: discord.Role = None,
-                    check_hour: int = 9):
+    async def setup(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        birthday_role: discord.Role = None,
+        mod_role: discord.Role = None,
+        #birthday_role: Optional[discord.Role] = None,
+        #mod_role: Optional[discord.Role] = None,
+        check_hour: int = 9
+    ):
+        # Clamp check_hour to valid range
+        check_hour = max(0, min(check_hour, 23))
+
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Only admins can run this.", ephemeral=True)
+            await interaction.response.send_message(
+                "❗ You are not allowed to use this.", ephemeral=True
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
-        check_hour = max(0, min(check_hour, 23))
-        
+
         # Save config to DB
         async with aiosqlite.connect(DB_FILE) as db:
             await db.execute(
@@ -46,7 +59,7 @@ class SetupCog(commands.Cog):
                 (
                     str(interaction.guild.id),
                     str(channel.id),
-                    str(birthday_role.id),
+                    str(birthday_role.id) if birthday_role else None,
                     str(mod_role.id) if mod_role else None,
                     check_hour
                 )
