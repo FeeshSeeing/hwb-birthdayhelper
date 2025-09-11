@@ -23,6 +23,12 @@ async def init_db():
                 PRIMARY KEY(guild_id, user_id)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS config (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
         await db.commit()
     logger.info("✅ Database initialized.")
 

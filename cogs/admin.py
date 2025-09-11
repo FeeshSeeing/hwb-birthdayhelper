@@ -128,27 +128,5 @@ class Admin(commands.Cog):
             logger.error(f"Import error: {e}")
             await interaction.followup.send(f"🚨 Error importing birthdays: {e}", ephemeral=True)
 
-    @app_commands.command(name="exportbirthdays", description="Export birthdays to a text file")
-    async def exportbirthdays(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        birthdays = await get_birthdays(str(interaction.guild.id))
-        if not birthdays:
-            await interaction.followup.send("No birthdays found for this server.", ephemeral=True)
-            return
-
-        lines = []
-        for user_id, birthday in birthdays:
-            member = interaction.guild.get_member(int(user_id))
-            name = member.display_name if member else f"<@{user_id}>"
-            lines.append(f"{name} - {birthday}")
-
-        file_content = "\n".join(lines)
-        file_name = f"birthdays_{interaction.guild.id}.txt"
-        with open(file_name, "w", encoding="utf-8") as f:
-            f.write(file_content)
-
-        logger.info(f"📤 Exported {len(birthdays)} birthdays for {interaction.guild.name}")
-        await interaction.followup.send(file=discord.File(file_name), ephemeral=True)
-
 async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))
