@@ -5,6 +5,17 @@ from database import DB_FILE, get_birthdays
 from logger import logger
 from datetime import datetime
 
+def parse_day_month_input(day_input, month_input):
+    """Validate and parse day and month input."""
+    try:
+        day = int(day_input)
+        month = int(month_input)
+        if 1 <= day <= 31 and 1 <= month <= 12:
+            return day, month
+    except ValueError:
+        pass
+    return None
+
 def format_birthday_display(birthday_str):
     try:
         month_str, day_str = birthday_str.split("-")
