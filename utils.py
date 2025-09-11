@@ -44,19 +44,17 @@ async def update_pinned_birthday_message(guild: discord.Guild):
     if not birthdays:
         content = "📂 No birthdays found yet."
     else:
-        # Sort alphabetically by member display name (fallback: user_id)
+        # Sort by birthday date (MM-DD)
         sorted_birthdays = sorted(
             birthdays,
-            key=lambda x: (
-                guild.get_member(int(x[0])).display_name.lower()
-                if guild.get_member(int(x[0])) else str(x[0])
-            )
+            key=lambda x: (int(x[0].split("-")[0]), int(x[0].split("-")[1]))
         )
+
         lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
-        for user_id, birthday in sorted_birthdays:  # <--- fixed here
+        for birthday_str, user_id in [(b, u) for u, b in sorted_birthdays]:
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
-            lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
+            lines.append(f"✦ {name}: {format_birthday_display(birthday_str)}")
         content = "\n".join(lines)
 
     async with aiosqlite.connect(DB_FILE) as db:
