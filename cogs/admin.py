@@ -136,6 +136,39 @@ class Admin(commands.Cog):
             logger.error(f"Import error: {e}")
             await interaction.followup.send(f"🚨 Error importing birthdays: {e}", ephemeral=True)
 
+    @app_commands.command(name="wipeguild", description="Completely wipe all birthdays and config for this server (Admin/Mod)")
+    async def wipeguild(self, interaction: discord.Interaction):
+        guild_config = await get_guild_config(str(interaction.guild.id))
+        if not guild_config or not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
+            await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
+            return
+
+        await interaction.response.send_message(
+            "⚠️ **This will erase ALL birthdays and settings for this server.**\n"
+            "Type `YES` to confirm within 15 seconds.", ephemeral=True
+        )
+
+        def check(message: discord.Message):
+            return (
+                message.author == interaction.user
+                and message.channel == interaction.channel
+                and message.content.strip().upper() == "YES"
+            )
+
+        try:
+            reply = await self.bot.wait_for("message", check=check, timeout=15)
+        except TimeoutError:
+            await interaction.followup.send("⏳ Wipe cancelled — no confirmation received.", ephemeral=True)
+            return
+
+        async with aiosqlite.connect(DB_FILE) as db:
+            await db.execute("DELETE FROM guild_config WHERE guild_id=?", (str(interaction.guild.id),))
+            await db.execute("DELETE FROM birthdays WHERE guild_id=?", (str(interaction.guild.id),))
+            await db.execute("DELETE FROM config WHERE key=?", (f"pinned_birthday_msg_{interaction.guild.id}",))
+            await db.commit()
+
+        logger.warning(f"🧹 Wiped all data for guild {interaction.guild.name} ({interaction.guild.id})")
+        await interaction.followup.send("✅ All data wiped. Please run `/setup` again to reconfigure.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))
