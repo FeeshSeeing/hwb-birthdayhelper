@@ -1,3 +1,4 @@
+# tasks.py
 import asyncio
 from datetime import datetime
 import discord
@@ -6,6 +7,7 @@ from database import get_guild_config, get_birthdays
 # Track users already wished per guild
 already_wished_today = {}
 last_checked_date = None  # track last day to reset
+
 
 async def check_and_send_birthdays(guild: discord.Guild):
     """Check birthdays for a guild and send messages if today matches (GMT+0)."""
@@ -28,6 +30,8 @@ async def check_and_send_birthdays(guild: discord.Guild):
         already_wished_today[guild_id] = set()
 
     birthdays = await get_birthdays(guild_id)
+    birthday_role = guild.get_role(config.get("birthday_role_id")) if config.get("birthday_role_id") else None
+
     for user_id, birthday in birthdays:
         b_month, b_day = map(int, birthday.split("-"))
 
@@ -38,22 +42,32 @@ async def check_and_send_birthdays(guild: discord.Guild):
         else:
             birthday_today = today_str == birthday
 
+        member = guild.get_member(int(user_id))
+        if not member:
+            continue
+
         if birthday_today and user_id not in already_wished_today[guild_id]:
-            member = guild.get_member(int(user_id))
-            if member:
-                await channel.send(
-                    f"Happy Birthday, {member.mention}! 🎈\n"
-                    f"From all of us at {guild.name}, sending you lots of love today 💖🎂"
-                )
-                # Add birthday role if configured
-                if config.get("birthday_role_id"):
-                    role = guild.get_role(config["birthday_role_id"])
-                    if role and role not in member.roles:
-                        try:
-                            await member.add_roles(role, reason="Birthday!")
-                        except discord.Forbidden:
-                            await channel.send(f"⚠️ Cannot add birthday role to {member.mention}.")
+            # Send birthday message
+            await channel.send(
+                f"Happy Birthday, {member.mention}! 🎈\n"
+                f"From all of us at {guild.name}, sending you lots of love today 💖🎂"
+            )
+
+            # Add birthday role if configured
+            if birthday_role and birthday_role not in member.roles:
+                try:
+                    await member.add_roles(birthday_role, reason="Birthday!")
+                except discord.Forbidden:
+                    await channel.send(f"⚠️ Cannot add birthday role to {member.mention}.")
+
             already_wished_today[guild_id].add(user_id)
+        elif birthday_role and birthday_role in member.roles and not birthday_today:
+            # Remove birthday role if it’s not their birthday today
+            try:
+                await member.remove_roles(birthday_role, reason="Birthday finished")
+            except discord.Forbidden:
+                await channel.send(f"⚠️ Cannot remove birthday role from {member.mention}.")
+
 
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
     """Background loop to check birthdays every interval_minutes (GMT+0)."""
@@ -72,6 +86,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
             await check_and_send_birthdays(guild)
 
         await asyncio.sleep(interval_minutes * 60)
+
 
 # Optional helper to run manually from /testbirthday
 async def run_birthday_check_once(bot: discord.Client):
