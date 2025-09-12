@@ -1,59 +1,63 @@
+# cogs/testdate.py
 import discord
 from discord import app_commands
 from discord.ext import commands
+import datetime as dt
 from tasks import run_birthday_check_once
 from database import get_guild_config
-from utils import logger, parse_day_month_input
-import datetime as dt
-
-def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> bool:
-    """Check if a member is an administrator or has the optional moderator role."""
-    if member.guild_permissions.administrator:
-        return True
-    if mod_role_id:
-        for role in member.roles:
-            if role.id == mod_role_id:
-                return True
-    return False
 
 class TestDateCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
 
     @app_commands.command(
         name="testdate",
-        description="Force birthday check for a specific date (Admin/Mod)"
+        description="Run a birthday check for a specific date (Admin/Mod)"
     )
-    @app_commands.describe(
-        day="Day of the month",
-        month="Month number (1-12)"
-    )
-    async def testdate(self, interaction: discord.Interaction, day: int, month: int):
-        guild_config = await get_guild_config(str(interaction.guild.id))
-        if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
-            await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
-            logger.warning(f"{interaction.user} attempted unauthorized /testdate in {interaction.guild.name}")
-            return
-
+    @app_commands.describe(date="Enter date in DD/MM/YYYY format")
+    async def testdate(self, interaction: discord.Interaction, date: str):
         await interaction.response.defer(ephemeral=True)
 
-        result = parse_day_month_input(day, month)
-        if not result:
-            await interaction.followup.send("❗ Invalid day/month!", ephemeral=True)
+        # validate format
+        try:
+            day_str, month_str, year_str = date.split("/")
+            day, month, year = int(day_str), int(month_str), int(year_str)
+        except ValueError:
+            await interaction.followup.send(
+                "❗ Invalid format. Use DD/MM/YYYY.", ephemeral=True
+            )
             return
-        day, month = result
 
-        # Create a datetime object for the test date in GMT+0
-        today = dt.datetime.now(dt.timezone.utc)
-        test_date = dt.datetime(year=today.year, month=month, day=day, tzinfo=dt.timezone.utc)
+        # handle Feb 29 on non-leap years
+        is_leap = (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0))
+        if month == 2 and day == 29 and not is_leap:
+            await interaction.followup.send(
+                "⚠ 29 Feb is not a leap year. Birthday will be checked on 28 Feb.", ephemeral=True
+            )
+            day = 28  # adjust to Feb 28
 
         try:
-            await run_birthday_check_once(self.bot, test_date=test_date)
-            await interaction.followup.send(f"✅ Birthday check completed for {day:02d}-{month:02d} (GMT+0).", ephemeral=True)
-            logger.info(f"{interaction.user} ran /testdate for {day:02d}-{month:02d} in {interaction.guild.name}")
-        except Exception as e:
-            await interaction.followup.send(f"🚨 Error running testdate: {e}", ephemeral=True)
-            logger.error(f"Error running /testdate: {e}")
+            test_date = dt.datetime(year, month, day, tzinfo=dt.timezone.utc)
+        except ValueError:
+            await interaction.followup.send(
+                "❗ Invalid date. Please check day/month/year.", ephemeral=True
+            )
+            return
 
-async def setup(bot: commands.Bot):
+        # run birthday check only for this guild
+        guild = interaction.guild
+        guild_config = await get_guild_config(str(guild.id))
+        if not guild_config:
+            await interaction.followup.send(
+                "❗ Please run /setup first to configure HWB-BirthdayHelper.", ephemeral=True
+            )
+            return
+
+        await run_birthday_check_once(self.bot, guild=guild, test_date=test_date)
+
+        await interaction.followup.send(
+            f"✅ Birthday check run for {day:02d}/{month:02d}/{year}.", ephemeral=True
+        )
+
+async def setup(bot):
     await bot.add_cog(TestDateCog(bot))

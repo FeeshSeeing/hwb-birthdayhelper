@@ -6,7 +6,11 @@ from database import get_guild_config, get_birthdays
 already_wished_today = {}
 last_checked_date = None  # track last day to reset
 
-async def check_and_send_birthdays(guild: discord.Guild, today_override: dt.datetime = None):
+async def check_and_send_birthdays(
+    guild: discord.Guild,
+    today_override: dt.datetime = None,
+    ignore_wished: bool = False
+):
     """Check birthdays for a guild and send messages if today matches (GMT+0)."""
     global already_wished_today
 
@@ -33,11 +37,18 @@ async def check_and_send_birthdays(guild: discord.Guild, today_override: dt.date
         # Feb 29 handling
         if b_month == 2 and b_day == 29:
             is_leap = (now.year % 4 == 0 and (now.year % 100 != 0 or now.year % 400 == 0))
-            birthday_today = (today_str == "02-29") if is_leap else (today_str == "02-28")
+            if not is_leap:
+                # Non-leap year: birthday effectively on Feb 28
+                if today_override:
+                    birthday_today = today_str in ["02-28", "02-29"]
+                else:
+                    birthday_today = today_str == "02-28"
+            else:
+                birthday_today = today_str == "02-29"
         else:
             birthday_today = today_str == birthday
 
-        if birthday_today and user_id not in already_wished_today[guild_id]:
+        if birthday_today and (ignore_wished or user_id not in already_wished_today[guild_id]):
             member = guild.get_member(int(user_id))
             if member:
                 await channel.send(
@@ -51,8 +62,11 @@ async def check_and_send_birthdays(guild: discord.Guild, today_override: dt.date
                         try:
                             await member.add_roles(role, reason="Birthday!")
                         except discord.Forbidden:
-                            await channel.send(f"⚠️ Cannot add birthday role to {member.mention}.")
-            already_wished_today[guild_id].add(user_id)
+                            await channel.send(
+                                f"⚠️ Cannot add birthday role to {member.mention}."
+                            )
+            if not ignore_wished:
+                already_wished_today[guild_id].add(user_id)
 
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
     """Background loop to check birthdays every interval_minutes (GMT+0)."""
@@ -71,7 +85,14 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
 
         await asyncio.sleep(interval_minutes * 60)
 
-async def run_birthday_check_once(bot: discord.Client, test_date: dt.datetime = None):
-    """Run birthday check once for all guilds. Optional test_date overrides today."""
-    for guild in bot.guilds:
-        await check_and_send_birthdays(guild, today_override=test_date)
+async def run_birthday_check_once(
+    bot: discord.Client,
+    guild: discord.Guild = None,
+    test_date: dt.datetime = None
+):
+    """Run birthday check once for a specific guild or all guilds."""
+    if guild:
+        await check_and_send_birthdays(guild, today_override=test_date, ignore_wished=True)
+    else:
+        for g in bot.guilds:
+            await check_and_send_birthdays(g, today_override=test_date, ignore_wished=True)
