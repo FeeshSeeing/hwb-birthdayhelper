@@ -36,7 +36,7 @@ async def load_cogs():
     await bot.load_extension("cogs.setup_cog")
     await bot.load_extension("cogs.birthdays")
     await bot.load_extension("cogs.admin")
-    await bot.load_extension("cogs.test")
+    await bot.load_extension("cogs.testdate")
 
 @bot.event
 async def on_guild_join(guild: discord.Guild):

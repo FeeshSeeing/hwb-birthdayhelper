@@ -40,10 +40,17 @@ Notes:
 
 ==============================
 
-**Testing**
------------
-`/testbirthday`  
-> Force birthday check and reset the tracker (Admin-only). Useful for testing.
+**🎯 Testing Birthdays with /testdate**
+
+- **Command:** `/testdate day:<day> month:<month> [year:<year>]`
+  - Simulates birthday messages for a specific date (GMT+0)
+  - Example 1: `/testdate day:28 month:02` → simulate Feb 28 of the current year
+  - Example 2: `/testdate day:29 month:02 year:2024` → simulate Feb 29 of a leap year
+  - Resets the "already wished" tracker so all users can be wished again
+  - Automatically handles birthday role assignment and removal
+
+> ⚠ **Access:** Admins or users with the configured mod role (if set)
+> ✅ Fully handles birthdays, including Feb 29, with proper role management
 
 ==============================
 
