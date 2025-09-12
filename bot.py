@@ -28,16 +28,15 @@ async def on_ready():
 
     await asyncio.sleep(1)
 
-    # Clear old commands per guild (temporary safety step)
     for guild in bot.guilds:
         if guild is None:
-            continue
+            continue  # skip invalid guilds
         try:
-            # Clear all commands for the guild
+            # Clear old commands safely
             await bot.tree.clear_commands(guild=guild) # <- remove after first successful sync
             logger.info(f"🗑️ Cleared old commands for {guild.name}")
 
-            # Sync new commands for this guild
+            # Sync new commands
             await bot.tree.sync(guild=guild)
             logger.info(f"🔄 Synced new commands for {guild.name}")
 
