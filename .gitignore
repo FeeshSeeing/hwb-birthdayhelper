@@ -1,2 +1,17 @@
 .env
 birthdays.db
+# Python cache
+__pycache__/
+*.pyc
+
+# Database backups
+birthdays.db
+birthdays.db.bak
+birthdays_*.txt
+
+# Logs
+bot.log
+nohup.out
+
+# Virtual environment
+venv/
