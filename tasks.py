@@ -1,12 +1,12 @@
 import asyncio
-from datetime import datetime, timezone
 import discord
+import datetime as dt
 from database import get_guild_config, get_birthdays
 
 already_wished_today = {}
 last_checked_date = None  # track last day to reset
 
-async def check_and_send_birthdays(guild: discord.Guild, today_override: datetime = None):
+async def check_and_send_birthdays(guild: discord.Guild, today_override: dt.datetime = None):
     """Check birthdays for a guild and send messages if today matches (GMT+0)."""
     global already_wished_today
 
@@ -19,7 +19,7 @@ async def check_and_send_birthdays(guild: discord.Guild, today_override: datetim
     if not channel:
         return
 
-    now = today_override or datetime.now(timezone.utc)
+    now = today_override or dt.datetime.now(dt.timezone.utc)
     today_str = now.strftime("%m-%d")
     today_month, today_day = now.month, now.day
 
@@ -59,7 +59,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
     global already_wished_today, last_checked_date
 
     while True:
-        now = datetime.now(timezone.utc)
+        now = dt.datetime.now(dt.timezone.utc)
         today_str = now.strftime("%Y-%m-%d")
 
         if last_checked_date != today_str:
@@ -71,7 +71,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
 
         await asyncio.sleep(interval_minutes * 60)
 
-async def run_birthday_check_once(bot: discord.Client, test_date: datetime = None):
+async def run_birthday_check_once(bot: discord.Client, test_date: dt.datetime = None):
     """Run birthday check once for all guilds. Optional test_date overrides today."""
     for guild in bot.guilds:
         await check_and_send_birthdays(guild, today_override=test_date)
