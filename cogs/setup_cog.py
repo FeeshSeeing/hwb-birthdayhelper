@@ -4,7 +4,6 @@ from discord import app_commands
 from discord.ext import commands
 import aiosqlite
 from utils import update_pinned_birthday_message
-#from typing import Optional
 
 DB_FILE = "birthdays.db"
 
@@ -12,7 +11,6 @@ class SetupCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # Only ONE @app_commands.command decorator!
     @app_commands.command(
         name="setup",
         description="Setup the bot for your server"
@@ -21,7 +19,7 @@ class SetupCog(commands.Cog):
         channel="Channel to post birthdays",
         birthday_role="Role to assign on birthdays (optional)",
         mod_role="Moderator role (optional, only admins otherwise)",
-        check_hour="Hour to send birthday messages (0-23)"
+        check_hour="Hour to send birthday messages (0-23, GMT+0)(Default 9:00)"
     )
     async def setup(
         self,
@@ -29,8 +27,6 @@ class SetupCog(commands.Cog):
         channel: discord.TextChannel,
         birthday_role: discord.Role = None,
         mod_role: discord.Role = None,
-        #birthday_role: Optional[discord.Role] = None,
-        #mod_role: Optional[discord.Role] = None,
         check_hour: int = 9
     ):
         # Clamp check_hour to valid range
@@ -75,10 +71,20 @@ class SetupCog(commands.Cog):
         except Exception as e:
             print(f"Failed to sync commands for {interaction.guild.name}: {e}")
 
-        await interaction.followup.send(
-            f"✅ Bot configured! Birthdays will post in {channel.mention}",
-            ephemeral=True
-        )
+        # Send clear confirmation message
+        confirmation_lines = [
+            "✅ HWB-BirthdayHelper is now configured!",
+            f"Birthdays will post in {channel.mention} at {check_hour}:00 GMT+0.",
+            f"{'Birthday role: ' + birthday_role.mention if birthday_role else 'No birthday role set.'}",
+            f"{'Moderator role: ' + mod_role.mention if mod_role else 'Admin-only for mod commands.'}"
+        ]
+        if birthday_role:
+            confirmation_lines.append(
+                "⚠️ Make sure HWB-BirthdayHelper's bot role is higher than the birthday role "
+                "in the server role hierarchy, otherwise it cannot assign it."
+            )
+
+        await interaction.followup.send("\n".join(confirmation_lines), ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(SetupCog(bot))

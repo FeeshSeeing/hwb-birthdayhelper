@@ -1,20 +1,30 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from database import set_birthday, delete_birthday
+from database import set_birthday, delete_birthday, get_guild_config
 from utils import parse_day_month_input, format_birthday_display, update_pinned_birthday_message
 from logger import logger
+
+async def ensure_setup(interaction: discord.Interaction) -> bool:
+    guild_config = await get_guild_config(str(interaction.guild.id))
+    if not guild_config:
+        await interaction.response.send_message(
+            "❗ Please run `/setup` first to configure HWB-BirthdayHelper for this server!",
+            ephemeral=True
+        )
+        return False
+    return True
 
 class Birthdays(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(
-        name="setbirthday",
-        description="Set your birthday (day then month)"
-    )
+    @app_commands.command(name="setbirthday", description="Set your birthday (day then month)")
     @app_commands.describe(day="Day of birthday", month="Month of birthday")
     async def setbirthday(self, interaction: discord.Interaction, day: int, month: int):
+        if not await ensure_setup(interaction):
+            return
+
         await interaction.response.defer(ephemeral=True)
         result = parse_day_month_input(day, month)
         if not result:
@@ -41,6 +51,9 @@ class Birthdays(commands.Cog):
 
     @app_commands.command(name="deletebirthday", description="Delete your birthday")
     async def deletebirthday(self, interaction: discord.Interaction):
+        if not await ensure_setup(interaction):
+            return
+
         await interaction.response.defer(ephemeral=True)
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
@@ -55,6 +68,9 @@ class Birthdays(commands.Cog):
 
     @app_commands.command(name="listbirthdays", description="Refresh and pin the birthday list")
     async def listbirthdays(self, interaction: discord.Interaction):
+        if not await ensure_setup(interaction):
+            return
+
         await interaction.response.defer(ephemeral=True)
         try:
             await update_pinned_birthday_message(interaction.guild)

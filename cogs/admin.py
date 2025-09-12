@@ -1,30 +1,29 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import aiosqlite
-from database import set_birthday, delete_birthday, get_birthdays, get_guild_config, DB_FILE
+from database import set_birthday, delete_birthday, get_guild_config, DB_FILE
 from utils import parse_day_month_input, format_birthday_display, update_pinned_birthday_message
 from logger import logger
+import aiosqlite
 
 def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> bool:
-    """
-    Check if a member is an administrator or has the optional moderator role.
-    
-    - If mod_role_id is None, only administrators are allowed.
-    - If mod_role_id is set, admins or members with that role are allowed.
-    """
-    # Always allow administrators
     if member.guild_permissions.administrator:
         return True
-
-    # If a mod role is defined, allow members with that role
     if mod_role_id:
         for role in member.roles:
             if role.id == mod_role_id:
                 return True
-
-    # Otherwise, not allowed
     return False
+
+async def ensure_setup(interaction: discord.Interaction) -> bool:
+    guild_config = await get_guild_config(str(interaction.guild.id))
+    if not guild_config:
+        await interaction.response.send_message(
+            "❗ Please run `/setup` first to configure HWB-BirthdayHelper for this server!",
+            ephemeral=True
+        )
+        return False
+    return True
 
 class Admin(commands.Cog):
     def __init__(self, bot):
@@ -33,6 +32,9 @@ class Admin(commands.Cog):
     @app_commands.command(name="setuserbirthday", description="Set a birthday for another user (Admin/Mod)")
     @app_commands.describe(user="User", day="Day", month="Month")
     async def setuserbirthday(self, interaction: discord.Interaction, user: discord.Member, day: int, month: int):
+        if not await ensure_setup(interaction):
+            return
+
         guild_config = await get_guild_config(str(interaction.guild.id))
         if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
             await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
@@ -56,6 +58,9 @@ class Admin(commands.Cog):
     @app_commands.command(name="deleteuserbirthday", description="Delete a user's birthday (Admin/Mod)")
     @app_commands.describe(user="User")
     async def deleteuserbirthday(self, interaction: discord.Interaction, user: discord.Member):
+        if not await ensure_setup(interaction):
+            return
+
         guild_config = await get_guild_config(str(interaction.guild.id))
         if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
             await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
@@ -70,6 +75,9 @@ class Admin(commands.Cog):
 
     @app_commands.command(name="importbirthdays", description="Import birthdays from a message (Admin/Mod)")
     async def importbirthdays(self, interaction: discord.Interaction, channel: discord.TextChannel, message_id: str):
+        if not await ensure_setup(interaction):
+            return
+
         guild_config = await get_guild_config(str(interaction.guild.id))
         if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
             await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
@@ -127,6 +135,7 @@ class Admin(commands.Cog):
         except Exception as e:
             logger.error(f"Import error: {e}")
             await interaction.followup.send(f"🚨 Error importing birthdays: {e}", ephemeral=True)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))
