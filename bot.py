@@ -21,27 +21,35 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     logger.info(f"✅ Logged in as {bot.user}")
+
+    # Initialize database and background task
     await init_db()
-    bot.loop.create_task(birthday_check_loop(bot))  # background task
+    bot.loop.create_task(birthday_check_loop(bot))
 
-    # await asyncio.sleep(1)
-    # for guild in bot.guilds:
-    #     try:
-    #         await bot.tree.sync(guild=guild)
-    #         logger.info(f"🔄 Commands synced for {guild.name}")
-    #     except Exception as e:
-    #         logger.error(f"Failed to sync commands for {guild.name}: {e}")
+    await asyncio.sleep(1)
 
-
-    # Force refresh commands (temporarily)
+    # Clear old commands per guild (temporary safety step)
     for guild in bot.guilds:
         if guild is None:
             continue
+        try:
+            # Clear all commands for the guild
+            await bot.tree.clear_commands(guild=guild) # <- remove after first successful sync
+            logger.info(f"🗑️ Cleared old commands for {guild.name}")
+
+            # Sync new commands for this guild
+            await bot.tree.sync(guild=guild)
+            logger.info(f"🔄 Synced new commands for {guild.name}")
+
+        except Exception as e:
+            logger.error(f"Failed to sync commands for {guild.name}: {e}")
+
+    # sync globally (optional, slower to propagate)
     try:
-        await bot.tree.sync(guild=guild)
-        logger.info(f"🔄 Commands synced for {guild.name}")
+        await bot.tree.sync()
+        logger.info("🌐 Global command sync complete")
     except Exception as e:
-        logger.error(f"Failed to sync commands for {guild.name}: {e}")     
+        logger.error(f"Failed to sync global commands: {e}")
 
 async def load_cogs():
     await bot.load_extension("cogs.setup_cog")
