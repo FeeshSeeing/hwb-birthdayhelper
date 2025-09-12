@@ -1,34 +1,80 @@
-# HWB Birthday Helper
+**🎉 HWB-BirthdayHelper Documentation**
 
-...
+---
 
-## GDPR Compliance
-HWB Birthday Helper respects your privacy and follows the GDPR regulations. Below is how your data is handled:
+**1️⃣ Commands**
 
-### Data Collected
-- **User ID** (`discord.User.id`): To identify users for their birthdays.
-- **Guild ID** (`discord.Guild.id`): To store birthdays per server.
-- **Birthday** (month-day format, e.g., `12-25`): The only personal data stored.
+- `/setbirthday day:<day> month:<month>`  
+  Set your own birthday. Example: `/setbirthday day:25 month:12`  
 
-### Purpose
-- To display and send birthday messages on the correct day.
-- To pin and update birthday lists in Discord channels.
+- `/deletebirthday`  
+  Delete your own birthday.
 
-### Storage
-- Data is stored locally in an SQLite database (`birthdays.db`) on the host machine.
-- No data is sent to any external servers.
+- `/listbirthdays`  
+  Refreshes and pins the birthday list.
 
-### Retention
-- Data is retained until the user deletes their birthday or the guild removes the bot.
+- `/setuserbirthday user:<user> day:<day> month:<month>`  
+  **Admin/Mod only**: Set a birthday for another user.
 
-### User Rights
-- **Right to access:** Users can see their stored birthday using `/listbirthdays`.
-- **Right to deletion:** Users can delete their birthday with `/deletebirthday`.
-- **Right to modify:** Users can change their birthday with `/setbirthday`.
+- `/deleteuserbirthday user:<user>`  
+  **Admin/Mod only**: Delete a user's birthday.
 
-### Security
-- Only the bot and Discord administrators (if configured) can see or modify this data.
-- Birthday roles are assigned optionally and only on the user's birthday.
+- `/setup channel:<channel> [birthday_role:<role>] [mod_role:<role>] [check_hour:<0-23>]`  
+  Configure bot for your server. Optional:
+  - Birthday role: assigned on birthdays  
+  - Mod role: allowed to manage birthdays  
+  - Check hour: GMT+0 hour for daily birthday messages  
 
-### Contact
-- Users can request full deletion of their data by contacting the server administrator or the bot owner directly.
+- `/testdate day:<day> month:<month> [year:<year>]`  
+  **Admin/Mod only**: Simulate birthday messages for a specific date (GMT+0)  
+  Example: `/testdate day:29 month:02 year:2024`  
+
+---
+
+**2️⃣ Birthday Role and Bot Hierarchy**
+
+- BirthdayBot **must have a role above the birthday role** to assign/remove it.  
+- Optional permissions:
+  - `Manage Roles`: needed to assign/remove birthday roles  
+  - `Manage Messages`: needed to pin/update birthday messages  
+
+**Recommended setup:**
+1. Create a bot role (e.g., `BirthdayBot`).  
+2. Move it **above the birthday role** in the server settings.  
+3. Grant optional permissions.  
+4. Configure roles via `/setup`.
+
+---
+
+**3️⃣ Admin/Mod Access**
+
+- Admins or users with the configured mod role can use:
+  - `/setuserbirthday`  
+  - `/deleteuserbirthday`  
+  - `/testdate`  
+- Regular users can only manage their own birthdays with `/setbirthday` and `/deletebirthday`.
+
+---
+
+**4️⃣ Birthday Handling**
+
+- **GMT+0** is used for all birthday checks.  
+- Birthday messages are automatically sent at the configured check hour.  
+- Feb 29 birthdays are automatically announced on Feb 28 in non-leap years.  
+- Pinned birthday messages are updated after adding, removing, or changing birthdays.  
+
+---
+
+**5️⃣ Data Storage**
+
+- Stores user IDs, birthdays, and optional guild configuration (roles, channels, check hour).  
+- Data is stored locally in `birthdays.db`.  
+- No personal data is shared externally.  
+
+---
+
+**6️⃣ Notes and Limitations**
+
+- Use the bot responsibly and within Discord TOS.  
+- If the bot cannot assign/remove roles or pin messages, check role hierarchy and permissions.  
+- `/testdate` resets the daily tracker so all users can be wished again.  
