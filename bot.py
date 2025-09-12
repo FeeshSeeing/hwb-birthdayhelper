@@ -33,7 +33,7 @@ async def on_ready():
             continue  # skip invalid guilds
         try:
             # Clear old commands safely
-            await bot.tree.clear_commands(guild=guild) # <- remove after first successful sync
+            bot.tree.clear_commands(guild=guild) # <- remove after first successful sync
             logger.info(f"🗑️ Cleared old commands for {guild.name}")
 
             # Sync new commands
