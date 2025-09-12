@@ -1,12 +1,11 @@
 import calendar
 import aiosqlite
 import discord
-from database import DB_FILE, get_birthdays
+from database import DB_FILE, get_birthdays, get_guild_config
 from logger import logger
-from datetime import datetime, timezone
+from datetime import datetime
 
 def parse_day_month_input(day_input, month_input):
-    """Validate and parse day and month input."""
     try:
         day = int(day_input)
         month = int(month_input)
@@ -31,7 +30,7 @@ def format_birthday_display(birthday_str):
         return birthday_str
 
 async def update_pinned_birthday_message(guild: discord.Guild):
-    from database import get_guild_config  # avoid circular import
+    """Update pinned message for the server with all birthdays sorted by upcoming date."""
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")
@@ -46,12 +45,12 @@ async def update_pinned_birthday_message(guild: discord.Guild):
     if not birthdays:
         content = "📂 No birthdays found yet."
     else:
-        today = datetime.now(timezone.utc)
+        today = datetime.now(tz=datetime.timezone.utc)
         today_month, today_day = today.month, today.day
 
         def upcoming_sort_key(birthday_str):
             month, day = map(int, birthday_str.split("-"))
-            # Handle Feb 29 on non-leap years as Feb 28
+            # Handle Feb 29 on non-leap years as Feb 28 for sorting
             if month == 2 and day == 29:
                 is_leap = (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0))
                 if not is_leap:
@@ -59,7 +58,6 @@ async def update_pinned_birthday_message(guild: discord.Guild):
             delta = (month - today_month) * 31 + (day - today_day)
             return delta if delta >= 0 else delta + 12*31  # wrap around year
 
-        # Sort birthdays based on upcoming date from today
         sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x[1]))
 
         lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
