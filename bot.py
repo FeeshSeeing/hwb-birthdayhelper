@@ -24,13 +24,23 @@ async def on_ready():
     await init_db()
     bot.loop.create_task(birthday_check_loop(bot))  # background task
 
-    await asyncio.sleep(1)
+    # await asyncio.sleep(1)
+    # for guild in bot.guilds:
+    #     try:
+    #         await bot.tree.sync(guild=guild)
+    #         logger.info(f"🔄 Commands synced for {guild.name}")
+    #     except Exception as e:
+    #         logger.error(f"Failed to sync commands for {guild.name}: {e}")
+
+
+    # Force refresh commands (temporarily)
     for guild in bot.guilds:
         try:
-            await bot.tree.sync(guild=guild)
-            logger.info(f"🔄 Commands synced for {guild.name}")
+            await bot.tree.clear_commands(guild=guild)  # Wipe old commands
+            await bot.tree.sync(guild=guild)            # Sync fresh commands
+            logger.info(f"🧹 Cleared and synced commands for {guild.name}")
         except Exception as e:
-            logger.error(f"Failed to sync commands for {guild.name}: {e}")
+            logger.error(f"Failed to refresh commands for {guild.name}: {e}")        
 
 async def load_cogs():
     await bot.load_extension("cogs.setup_cog")
