@@ -1,9 +1,9 @@
 import calendar
 import aiosqlite
 import discord
+import datetime as dt
 from database import DB_FILE, get_birthdays, get_guild_config
 from logger import logger
-from datetime import datetime
 
 def parse_day_month_input(day_input, month_input):
     try:
@@ -45,18 +45,17 @@ async def update_pinned_birthday_message(guild: discord.Guild):
     if not birthdays:
         content = "📂 No birthdays found yet."
     else:
-        today = datetime.now(tz=datetime.timezone.utc)
+        today = dt.datetime.now(dt.timezone.utc)
         today_month, today_day = today.month, today.day
 
         def upcoming_sort_key(birthday_str):
             month, day = map(int, birthday_str.split("-"))
-            # Handle Feb 29 on non-leap years as Feb 28 for sorting
             if month == 2 and day == 29:
                 is_leap = (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0))
                 if not is_leap:
                     day = 28
             delta = (month - today_month) * 31 + (day - today_day)
-            return delta if delta >= 0 else delta + 12*31  # wrap around year
+            return delta if delta >= 0 else delta + 12*31
 
         sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x[1]))
 

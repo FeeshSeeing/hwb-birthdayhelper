@@ -1,15 +1,13 @@
-# cogs/testdate.py
 import discord
 from discord import app_commands
 from discord.ext import commands
-from tasks import check_and_send_birthdays, already_wished_today
+from tasks import run_birthday_check_once
 from database import get_guild_config
-from datetime import datetime
+from utils import logger, parse_day_month_input
+import datetime as dt
 
 def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> bool:
-    """
-    Returns True if member is admin or has the mod role (if defined)
-    """
+    """Check if a member is an administrator or has the optional moderator role."""
     if member.guild_permissions.administrator:
         return True
     if mod_role_id:
@@ -19,60 +17,43 @@ def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> b
     return False
 
 class TestDateCog(commands.Cog):
-    """Command to simulate birthday messages for a specific date (GMT+0). Admin or Mod only."""
-
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @app_commands.command(
         name="testdate",
-        description="Simulate birthday messages for a specific date (GMT+0)."
+        description="Force birthday check for a specific date (Admin/Mod)"
     )
     @app_commands.describe(
-        day="Day to simulate (1-31)",
-        month="Month to simulate (1-12)",
-        year="Optional year (default current year)"
+        day="Day of the month",
+        month="Month number (1-12)"
     )
-    async def testdate(
-        self,
-        interaction: discord.Interaction,
-        day: int,
-        month: int,
-        year: int = None
-    ):
+    async def testdate(self, interaction: discord.Interaction, day: int, month: int):
         guild_config = await get_guild_config(str(interaction.guild.id))
-        mod_role_id = guild_config.get("mod_role_id") if guild_config else None
-
-        if not is_admin_or_mod(interaction.user, mod_role_id):
-            await interaction.response.send_message(
-                "❌ You are not allowed to use this command.", ephemeral=True
-            )
+        if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
+            await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
+            logger.warning(f"{interaction.user} attempted unauthorized /testdate in {interaction.guild.name}")
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Use provided year or current year
-        now = datetime.utcnow()
-        year = year or now.year
-
-        # Validate date
-        try:
-            test_date = datetime(year=year, month=month, day=day)
-        except ValueError:
-            await interaction.followup.send("❗ Invalid date!", ephemeral=True)
+        result = parse_day_month_input(day, month)
+        if not result:
+            await interaction.followup.send("❗ Invalid day/month!", ephemeral=True)
             return
+        day, month = result
 
-        # Reset tracker so everyone can be wished again
-        already_wished_today.clear()
+        # Create a datetime object for the test date in GMT+0
+        today = dt.datetime.now(dt.timezone.utc)
+        test_date = dt.datetime(year=today.year, month=month, day=day, tzinfo=dt.timezone.utc)
 
-        # Run birthday check for all guilds using the test date
-        for guild in self.bot.guilds:
-            await check_and_send_birthdays(guild, test_date=test_date)
-
-        await interaction.followup.send(
-            f"✅ Birthday check simulated for {test_date.strftime('%d-%m-%Y')}",
-            ephemeral=True
-        )
+        try:
+            await run_birthday_check_once(self.bot, test_date=test_date)
+            await interaction.followup.send(f"✅ Birthday check completed for {day:02d}-{month:02d} (GMT+0).", ephemeral=True)
+            logger.info(f"{interaction.user} ran /testdate for {day:02d}-{month:02d} in {interaction.guild.name}")
+        except Exception as e:
+            await interaction.followup.send(f"🚨 Error running testdate: {e}", ephemeral=True)
+            logger.error(f"Error running /testdate: {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(TestDateCog(bot))
