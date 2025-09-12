@@ -59,7 +59,7 @@
 **4️⃣ Birthday Handling**
 
 - **GMT+0** is used for all birthday checks.  
-- Birthday messages are automatically sent at the configured check hour.  
+- Birthday messages are automatically sent at the configured check hour. (9am UTC is default)
 - Feb 29 birthdays are automatically announced on Feb 28 in non-leap years.  
 - Pinned birthday messages are updated after adding, removing, or changing birthdays.  
 
