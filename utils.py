@@ -35,7 +35,7 @@ def format_birthday_display(birthday_str):
 
 async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: list[str] = None):
     """Update pinned message for the server with all birthdays sorted by upcoming date.
-    Optionally highlight today's birthdays and move them to the bottom.
+    Today’s birthdays are highlighted. Birthdays celebrated yesterday are automatically moved to the bottom.
     """
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
@@ -53,6 +53,8 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
     else:
         today = dt.datetime.now(dt.timezone.utc)
         today_month, today_day = today.month, today.day
+        yesterday = today - dt.timedelta(days=1)
+        yesterday_month, yesterday_day = yesterday.month, yesterday.day
 
         def upcoming_sort_key(birthday_str):
             month, day = map(int, birthday_str.split("-"))
@@ -64,15 +66,14 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
             delta = (month - today_month) * 31 + (day - today_day)
             return delta if delta >= 0 else delta + 12 * 31  # wrap around year
 
-        # Sort birthdays based on upcoming date from today
         sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x[1]))
 
-        # ✅ Highlight today's birthdays and move them to bottom
-        if highlight_today:
-            sorted_birthdays = (
-                [b for b in sorted_birthdays if b[0] not in highlight_today]
-                + [b for b in sorted_birthdays if b[0] in highlight_today]
-            )
+        # ✅ Separate yesterday birthdays to move them to bottom automatically
+        yesterday_birthdays = [
+            b for b in sorted_birthdays
+            if map(int, b[1].split("-")) == (yesterday_month, yesterday_day)
+        ]
+        sorted_birthdays = [b for b in sorted_birthdays if b not in yesterday_birthdays] + yesterday_birthdays
 
         lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
         for idx, (user_id, birthday) in enumerate(sorted_birthdays):

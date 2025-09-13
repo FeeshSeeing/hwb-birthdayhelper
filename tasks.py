@@ -31,7 +31,7 @@ async def check_and_send_birthdays(
         already_wished_today[guild_id] = set()
 
     birthdays = await get_birthdays(guild_id)
-    todays_birthdays = []  # <-- NEW: store today's user_ids
+    todays_birthdays = []  # <-- store today's user_ids
     for user_id, birthday in birthdays:
         b_month, b_day = map(int, birthday.split("-"))
 
@@ -71,11 +71,11 @@ async def check_and_send_birthdays(
                 already_wished_today[guild_id].add(user_id)
 
     # ✅ Refresh pinned birthday list and highlight today's birthdays
-    if todays_birthdays:
-        try:
-            await update_pinned_birthday_message(guild, highlight_today=todays_birthdays)
-        except Exception as e:
-            print(f"[WARN] Could not refresh pinned message for {guild.name}: {e}")
+    try:
+        await update_pinned_birthday_message(guild, highlight_today=todays_birthdays if todays_birthdays else None)
+    except Exception as e:
+        print(f"[WARN] Could not refresh pinned message for {guild.name}: {e}")
+
 
 async def remove_birthday_roles(guild: discord.Guild):
     """Remove birthday role from all members at the start of a new day."""
@@ -94,6 +94,7 @@ async def remove_birthday_roles(guild: discord.Guild):
             except discord.Forbidden:
                 pass  # ignore if bot lacks permissions
 
+
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
     """Background loop to check birthdays every interval_minutes (GMT+0)."""
     global already_wished_today, last_checked_date
@@ -111,10 +112,18 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
             already_wished_today = {}
             last_checked_date = today_str
 
+            # 3️⃣ Refresh pinned birthday messages for all guilds
+            for guild in bot.guilds:
+                try:
+                    await update_pinned_birthday_message(guild)
+                except Exception as e:
+                    print(f"[WARN] Could not refresh pinned message for {guild.name}: {e}")
+
         for guild in bot.guilds:
             await check_and_send_birthdays(guild)
 
         await asyncio.sleep(interval_minutes * 60)
+
 
 async def run_birthday_check_once(
     bot: discord.Client,
