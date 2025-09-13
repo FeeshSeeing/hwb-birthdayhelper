@@ -55,7 +55,6 @@ async def load_cogs():
     await bot.load_extension("cogs.birthdays")
     await bot.load_extension("cogs.admin")
     await bot.load_extension("cogs.testdate")
-    await bot.load_extension("cogs.birthdaylist")  # new paginated command
 
 @bot.event
 async def on_guild_join(guild: discord.Guild):
