@@ -89,7 +89,7 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
             )
 
         # Add hint line at bottom
-        lines.append("\n💡 Tip: Use /setbirthday to add your own special day!")
+        lines.append("\n> *💡 Tip: Use /setbirthday to add your own special day!*")
         content = "\n".join(lines)
 
     async with aiosqlite.connect(DB_FILE) as db:
