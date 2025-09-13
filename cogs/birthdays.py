@@ -8,6 +8,7 @@ from logger import logger
 import datetime as dt
 
 CONFETTI_ICON = "🎉"
+ENTRIES_PER_PAGE = 20
 
 # ----------------- Setup Check -----------------
 async def ensure_setup(interaction: discord.Interaction) -> bool:
@@ -21,7 +22,7 @@ async def ensure_setup(interaction: discord.Interaction) -> bool:
     return True
 
 # ---------------- Pagination Helpers ----------------
-def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = 20):
+def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = ENTRIES_PER_PAGE):
     return [birthdays[i:i + per_page] for i in range(0, len(birthdays), per_page)]
 
 def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
@@ -75,6 +76,7 @@ class Birthdays(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    # ---------------- Set Birthday ----------------
     @app_commands.command(name="setbirthday", description="Set your birthday (day then month)")
     @app_commands.describe(day="Day of birthday", month="Month of birthday")
     async def setbirthday(self, interaction: discord.Interaction, day: int, month: int):
@@ -92,8 +94,7 @@ class Birthdays(commands.Cog):
         birthday_str = f"{month:02d}-{day:02d}"
         try:
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
-            
-            # Refresh pinned message with today's birthdays highlighted
+            # Refresh pinned message immediately
             birthdays = await get_birthdays(str(interaction.guild.id))
             birthdays_today = [
                 user_id for user_id, bday in birthdays
@@ -114,6 +115,7 @@ class Birthdays(commands.Cog):
             ephemeral=True
         )
 
+    # ---------------- Delete Birthday ----------------
     @app_commands.command(name="deletebirthday", description="Delete your birthday")
     async def deletebirthday(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
@@ -122,8 +124,7 @@ class Birthdays(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
-
-            # Refresh pinned message after deletion
+            # Refresh pinned message immediately
             birthdays = await get_birthdays(str(interaction.guild.id))
             birthdays_today = [
                 user_id for user_id, bday in birthdays
@@ -139,6 +140,7 @@ class Birthdays(commands.Cog):
         logger.info(f"🗑️ {interaction.user} deleted their birthday in {interaction.guild.name}")
         await interaction.followup.send("All done 🎈 Your birthday has been deleted.", ephemeral=True)
 
+    # ---------------- View Birthdays ----------------
     @app_commands.command(name="viewbirthdays", description="View the birthday list and refresh the pinned message")
     async def viewbirthdays(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
@@ -153,26 +155,24 @@ class Birthdays(commands.Cog):
 
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [
-                user_id for user_id, birthday in birthdays
-                if int(birthday.split("-")[0]) == today.month and int(birthday.split("-")[1]) == today.day
+                user_id for user_id, bday in birthdays
+                if int(bday.split("-")[0]) == today.month and int(bday.split("-")[1]) == today.day
             ]
-
             # Refresh pinned message while preserving confetti
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
 
-            # Sort upcoming first
+            # Sort upcoming birthdays
             def upcoming_sort_key(b):
                 month, day = map(int, b[1].split("-"))
                 delta = (month - today.month) * 31 + (day - today.day)
                 return delta if delta >= 0 else delta + 12 * 31
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
 
-            # Pagination only if > 20
-            if len(birthdays_sorted) <= 20:
+            if len(birthdays_sorted) <= ENTRIES_PER_PAGE:
                 content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(birthdays_sorted, interaction.guild)}"
                 await interaction.followup.send(content=content, ephemeral=True)
             else:
-                pages = paginate_birthdays(birthdays_sorted, per_page=20)
+                pages = paginate_birthdays(birthdays_sorted, per_page=ENTRIES_PER_PAGE)
                 view = BirthdayPages(pages, interaction.guild)
                 content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(pages[0], interaction.guild)}"
                 msg = await interaction.followup.send(content=content, view=view, ephemeral=True)
@@ -182,6 +182,6 @@ class Birthdays(commands.Cog):
             logger.error(f"Error viewing pinned birthday list by {interaction.user}: {e}")
             await interaction.followup.send("🚨 Failed to view birthday list. Try again later.", ephemeral=True)
 
-
+# ---------------- Setup Cog ----------------
 async def setup(bot: commands.Bot):
     await bot.add_cog(Birthdays(bot))
