@@ -31,7 +31,11 @@ def format_birthday_display(birthday_str):
     except:
         return birthday_str
 
-async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: list[str] = None, manual: bool = False):
+async def update_pinned_birthday_message(
+    guild: discord.Guild,
+    highlight_today: list[str] = None,
+    manual: bool = False
+):
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")
@@ -41,6 +45,9 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
     if not channel:
         logger.warning(f"Channel not found for pinned message in guild {guild.name}")
         return
+
+    # Get daily check hour, default 18 UTC
+    check_hour = guild_config.get("check_hour", 18)
 
     birthdays = await get_birthdays(str(guild.id))
     if not birthdays:
@@ -74,8 +81,9 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
                 f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\nUse /viewbirthdays to view the full list."
             )
 
-        # Optional tip
+        # Tip + daily check hour
         lines.append("\n> *💡 Tip: Use /setbirthday to add your own special day!*")
+        lines.append(f"_Bot checks birthdays daily at {check_hour}:00 UTC_")
 
         content = "\n".join(lines)
 
