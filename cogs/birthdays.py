@@ -7,6 +7,8 @@ from utils import parse_day_month_input, format_birthday_display, update_pinned_
 from logger import logger
 import datetime as dt
 
+CONFETTI_ICON = "🎉"  # icon for users with birthday today
+
 # ----------------- Setup Check -----------------
 async def ensure_setup(interaction: discord.Interaction) -> bool:
     guild_config = await get_guild_config(str(interaction.guild.id))
@@ -24,12 +26,18 @@ def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = 10):
     return [birthdays[i:i + per_page] for i in range(0, len(birthdays), per_page)]
 
 def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
-    """Return a string for one page of birthdays."""
+    """Return a string for one page of birthdays, preserving confetti for today."""
+    today = dt.datetime.now(dt.timezone.utc)
     lines = []
+
     for user_id, birthday in page:
         member = guild.get_member(int(user_id))
         name = member.display_name if member else f"<@{user_id}>"
-        lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
+        month, day = map(int, birthday.split("-"))
+
+        # Add confetti if today
+        prefix = CONFETTI_ICON + " " if month == today.month and day == today.day else "✦ "
+        lines.append(f"{prefix}{name}: {format_birthday_display(birthday)}")
     return "\n".join(lines)
 
 # ---------------- Pagination View ----------------
@@ -47,10 +55,8 @@ class BirthdayPages(View):
         await interaction.response.edit_message(content=content, view=self)
 
     async def on_timeout(self):
-        # Disable all buttons after timeout
         for child in self.children:
             child.disabled = True
-        # Edit message to disable buttons (if still exists)
         try:
             await self.message.edit(view=self)
         except Exception:
@@ -142,11 +148,16 @@ class Birthdays(commands.Cog):
                 return delta if delta >= 0 else delta + 12 * 31
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
 
-            pages = paginate_birthdays(birthdays_sorted, per_page=10)
-            view = BirthdayPages(pages, interaction.guild)
-            content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(pages[0], interaction.guild)}"
-            msg = await interaction.followup.send(content=content, view=view, ephemeral=True)
-            view.message = await msg.original_response()  # store reference for timeout disabling
+            # Pagination only if > 10
+            if len(birthdays_sorted) <= 10:
+                content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(birthdays_sorted, interaction.guild)}"
+                await interaction.followup.send(content=content, ephemeral=True)
+            else:
+                pages = paginate_birthdays(birthdays_sorted, per_page=20)
+                view = BirthdayPages(pages, interaction.guild)
+                content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(pages[0], interaction.guild)}"
+                msg = await interaction.followup.send(content=content, view=view, ephemeral=True)
+                view.message = await msg.original_response()
 
         except Exception as e:
             logger.error(f"Error viewing pinned birthday list by {interaction.user}: {e}")

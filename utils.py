@@ -6,6 +6,7 @@ from database import DB_FILE, get_birthdays, get_guild_config
 from logger import logger
 
 MAX_PINNED_ENTRIES = 20  # Only show first 20 in pinned message
+CONFETTI_ICON = "🎉"
 
 def parse_day_month_input(day_input, month_input):
     """Validate and parse day and month input."""
@@ -55,7 +56,6 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
 
         def upcoming_sort_key(b):
             month, day = map(int, b[1].split("-"))
-            # Handle Feb 29 birthdays on non-leap years
             if month == 2 and day == 29:
                 is_leap = (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0))
                 if not is_leap:
@@ -71,8 +71,11 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
                 break
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
+
+            # Preserve confetti for users who are highlighted (today) or for manual view
             if highlight_today and user_id in highlight_today and not manual:
-                name = f"🎉 {name}"  # Only highlight automatic daily birthdays
+                name = f"{CONFETTI_ICON} {name}"
+
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
 
         if len(sorted_birthdays) > MAX_PINNED_ENTRIES:

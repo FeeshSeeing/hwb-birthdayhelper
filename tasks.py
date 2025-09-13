@@ -61,6 +61,7 @@ async def check_and_send_birthdays(
                 already_wished_today[guild_id].add(user_id)
 
     try:
+        # Pass the list of today's birthdays to preserve confetti in pinned message
         await update_pinned_birthday_message(
             guild,
             highlight_today=todays_birthdays if todays_birthdays else None
@@ -101,6 +102,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
 
             for guild in bot.guilds:
                 try:
+                    # Pass empty highlight_today to refresh pinned message without removing confetti
                     await update_pinned_birthday_message(guild)
                 except Exception as e:
                     print(f"[WARN] Could not refresh pinned message for {guild.name}: {e}")
