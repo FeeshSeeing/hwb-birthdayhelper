@@ -28,7 +28,6 @@ def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = ENTRIES
 def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
     today = dt.datetime.now(dt.timezone.utc)
     lines = []
-
     for user_id, birthday in page:
         member = guild.get_member(int(user_id))
         name = member.display_name if member else f"<@{user_id}>"
@@ -40,10 +39,15 @@ def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
 # ---------------- Pagination View ----------------
 class BirthdayPages(View):
     def __init__(self, pages, guild: discord.Guild):
-        super().__init__(timeout=120)
+        super().__init__(timeout=180)
         self.pages = pages
         self.guild = guild
         self.current = 0
+
+        # Disable buttons if only 1 page
+        if len(pages) <= 1:
+            for child in self.children:
+                child.disabled = True
 
     async def update_message(self, interaction: discord.Interaction):
         content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n"
@@ -92,8 +96,10 @@ class Birthdays(commands.Cog):
 
         day, month = result
         birthday_str = f"{month:02d}-{day:02d}"
+
         try:
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
+
             # Refresh pinned message immediately
             birthdays = await get_birthdays(str(interaction.guild.id))
             birthdays_today = [
@@ -124,6 +130,7 @@ class Birthdays(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
+
             # Refresh pinned message immediately
             birthdays = await get_birthdays(str(interaction.guild.id))
             birthdays_today = [
@@ -141,12 +148,13 @@ class Birthdays(commands.Cog):
         await interaction.followup.send("All done 🎈 Your birthday has been deleted.", ephemeral=True)
 
     # ---------------- View Birthdays ----------------
-    @app_commands.command(name="viewbirthdays", description="View the birthday list and refresh the pinned message")
+    @app_commands.command(name="viewbirthdays", description="View the birthday list with pagination")
     async def viewbirthdays(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
             return
 
         await interaction.response.defer(ephemeral=True)
+
         try:
             birthdays = await get_birthdays(str(interaction.guild.id))
             if not birthdays:
@@ -158,7 +166,8 @@ class Birthdays(commands.Cog):
                 user_id for user_id, bday in birthdays
                 if int(bday.split("-")[0]) == today.month and int(bday.split("-")[1]) == today.day
             ]
-            # Refresh pinned message while preserving confetti
+
+            # Refresh pinned message
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
 
             # Sort upcoming birthdays
@@ -166,8 +175,10 @@ class Birthdays(commands.Cog):
                 month, day = map(int, b[1].split("-"))
                 delta = (month - today.month) * 31 + (day - today.day)
                 return delta if delta >= 0 else delta + 12 * 31
+
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
 
+            # Pagination
             if len(birthdays_sorted) <= ENTRIES_PER_PAGE:
                 content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(birthdays_sorted, interaction.guild)}"
                 await interaction.followup.send(content=content, ephemeral=True)
@@ -179,7 +190,7 @@ class Birthdays(commands.Cog):
                 view.message = await msg.original_response()
 
         except Exception as e:
-            logger.error(f"Error viewing pinned birthday list by {interaction.user}: {e}")
+            logger.error(f"Error viewing birthday list by {interaction.user}: {e}")
             await interaction.followup.send("🚨 Failed to view birthday list. Try again later.", ephemeral=True)
 
 # ---------------- Setup Cog ----------------
