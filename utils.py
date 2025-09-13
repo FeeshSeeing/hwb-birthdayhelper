@@ -75,7 +75,7 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
             )
 
         # Optional tip
-        lines.append("\n# Tip: Use /setbirthday to add your own special day")
+        lines.append("\n> *💡 Tip: Use /setbirthday to add your own special day!*")
 
         content = "\n".join(lines)
 
