@@ -49,7 +49,7 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
 
     birthdays = await get_birthdays(str(guild.id))
     if not birthdays:
-        content = "📂 No birthdays found yet."
+        content = "📂 No birthdays found yet.\n\n💡 Tip: Use /setbirthday to add your own special day!"
     else:
         today = dt.datetime.now(dt.timezone.utc)
         today_month, today_day = today.month, today.day
@@ -72,9 +72,14 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
 
-            # Always highlight users in highlight_today
+            # Always highlight users in highlight_today (manual refresh also preserves)
             if highlight_today and user_id in highlight_today:
                 name = f"{CONFETTI_ICON} {name}"
+            else:
+                # Fallback: auto-highlight birthdays that are today even if highlight_today is None
+                b_month, b_day = map(int, birthday.split("-"))
+                if b_month == today_month and b_day == today_day:
+                    name = f"{CONFETTI_ICON} {name}"
 
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
 
@@ -83,6 +88,8 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
                 f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\nUse /viewbirthdays to view the full list."
             )
 
+        # Add hint line at bottom
+        lines.append("\n💡 Tip: Use /setbirthday to add your own special day!")
         content = "\n".join(lines)
 
     async with aiosqlite.connect(DB_FILE) as db:
