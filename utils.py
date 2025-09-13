@@ -5,7 +5,7 @@ import datetime as dt
 from database import DB_FILE, get_birthdays, get_guild_config
 from logger import logger
 
-MAX_PINNED_ENTRIES = 20  # Show only first 20 in pinned message
+MAX_PINNED_ENTRIES = 20  # Only show first 20 in pinned message
 
 def parse_day_month_input(day_input, month_input):
     """Validate and parse day and month input."""
@@ -27,15 +27,14 @@ def format_birthday_display(birthday_str):
         if 4 <= day <= 20 or 24 <= day <= 30:
             suffix = "th"
         else:
-            suffixes = ["st", "nd", "rd"]
-            suffix = suffixes[(day % 10) - 1] if 1 <= day % 10 <= 3 else "th"
+            suffix = ["st", "nd", "rd"][(day % 10) - 1] if 1 <= day % 10 <= 3 else "th"
         return f"{day}{suffix} {month_name}"
     except:
         return birthday_str
 
-async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: list[str] = None):
+async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: list[str] = None, manual: bool = False):
     """Update pinned message for the server with all birthdays sorted by upcoming date.
-    Today’s birthdays are highlighted. Birthdays celebrated yesterday are automatically moved to the bottom.
+    Today's birthdays are highlighted (unless manual refresh).
     """
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
@@ -53,27 +52,18 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
     else:
         today = dt.datetime.now(dt.timezone.utc)
         today_month, today_day = today.month, today.day
-        yesterday = today - dt.timedelta(days=1)
-        yesterday_month, yesterday_day = yesterday.month, yesterday.day
 
-        def upcoming_sort_key(birthday_str):
-            month, day = map(int, birthday_str.split("-"))
-            # Handle Feb 29 birthdays on non-leap years as Feb 28
+        def upcoming_sort_key(b):
+            month, day = map(int, b[1].split("-"))
+            # Handle Feb 29 birthdays on non-leap years
             if month == 2 and day == 29:
                 is_leap = (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0))
                 if not is_leap:
                     day = 28
             delta = (month - today_month) * 31 + (day - today_day)
-            return delta if delta >= 0 else delta + 12 * 31  # wrap around year
+            return delta if delta >= 0 else delta + 12 * 31
 
-        sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x[1]))
-
-        # ✅ Separate yesterday birthdays to move them to bottom automatically
-        yesterday_birthdays = [
-            b for b in sorted_birthdays
-            if map(int, b[1].split("-")) == (yesterday_month, yesterday_day)
-        ]
-        sorted_birthdays = [b for b in sorted_birthdays if b not in yesterday_birthdays] + yesterday_birthdays
+        sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x))
 
         lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
         for idx, (user_id, birthday) in enumerate(sorted_birthdays):
@@ -81,19 +71,17 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
                 break
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
-            if highlight_today and user_id in highlight_today:
-                name = f"🎉 {name}"
+            if highlight_today and user_id in highlight_today and not manual:
+                name = f"🎉 {name}"  # Only highlight automatic daily birthdays
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
 
-        # Add note if more birthdays exist
         if len(sorted_birthdays) > MAX_PINNED_ENTRIES:
             lines.append(
-                f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\nUse /birthdaylist to view the full list with pages."
+                f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\nUse /viewbirthdays to view the full list."
             )
 
         content = "\n".join(lines)
 
-    # Fetch or create pinned message
     async with aiosqlite.connect(DB_FILE) as db:
         async with db.execute(
             "SELECT value FROM config WHERE key=?", (f"pinned_birthday_msg_{guild.id}",)
