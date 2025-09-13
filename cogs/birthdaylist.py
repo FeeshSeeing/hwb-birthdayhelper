@@ -1,15 +1,15 @@
-# cogs/birthdays.py
+# cogs/birthdaylist.py
 import discord
 from discord import app_commands
 from discord.ext import commands
-from database import get_birthdays, get_guild_config
+from database import get_birthdays
 from utils import format_birthday_display, update_pinned_birthday_message
 from datetime import datetime, timezone
 
 ENTRIES_PER_PAGE = 20
 CONFETTI_ICON = "🎉"
 
-class Birthdays(commands.Cog):
+class BirthdayList(commands.Cog):  # <--- Rename to avoid conflict
     def __init__(self, bot):
         self.bot = bot
 
@@ -33,7 +33,7 @@ class Birthdays(commands.Cog):
 
         def upcoming_sort_key(bday_tuple):
             month, day = map(int, bday_tuple[1].split("-"))
-            # Feb 29 handling
+            # Handle Feb 29 on non-leap years
             if month == 2 and day == 29:
                 is_leap = (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0))
                 if not is_leap:
@@ -66,8 +66,7 @@ class Birthdays(commands.Cog):
                 if uid in today_ids:
                     name = f"{CONFETTI_ICON} {name}"
                 lines.append(f"✦ {name}: {format_birthday_display(bday)}")
-            content = "\n".join(lines)
-            pages.append(content)
+            pages.append("\n".join(lines))
 
         # Pagination View
         class BirthdayView(discord.ui.View):
@@ -110,4 +109,4 @@ class Birthdays(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Birthdays(bot))
+    await bot.add_cog(BirthdayList(bot))  # <--- Matches the renamed class
