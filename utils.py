@@ -35,7 +35,7 @@ def format_birthday_display(birthday_str):
 
 async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: list[str] = None, manual: bool = False):
     """Update pinned message for the server with all birthdays sorted by upcoming date.
-    Today's birthdays are highlighted (unless manual refresh).
+    Today's birthdays are highlighted (confetti) whether manual or automatic.
     """
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
@@ -72,8 +72,8 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
 
-            # Preserve confetti for users who are highlighted (today) or for manual view
-            if highlight_today and user_id in highlight_today and not manual:
+            # Always highlight users in highlight_today
+            if highlight_today and user_id in highlight_today:
                 name = f"{CONFETTI_ICON} {name}"
 
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")

@@ -21,7 +21,7 @@ async def ensure_setup(interaction: discord.Interaction) -> bool:
     return True
 
 # ---------------- Pagination Helpers ----------------
-def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = 10):
+def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = 20):
     """Split birthdays into pages of `per_page` items."""
     return [birthdays[i:i + per_page] for i in range(0, len(birthdays), per_page)]
 
@@ -35,7 +35,6 @@ def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
         name = member.display_name if member else f"<@{user_id}>"
         month, day = map(int, birthday.split("-"))
 
-        # Add confetti if today
         prefix = CONFETTI_ICON + " " if month == today.month and day == today.day else "✦ "
         lines.append(f"{prefix}{name}: {format_birthday_display(birthday)}")
     return "\n".join(lines)
@@ -133,23 +132,33 @@ class Birthdays(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
         try:
-            await update_pinned_birthday_message(interaction.guild, manual=True)
-
             birthdays = await get_birthdays(str(interaction.guild.id))
             if not birthdays:
                 await interaction.followup.send("📂 No birthdays found yet.", ephemeral=True)
                 return
 
-            # Sort upcoming first
             today = dt.datetime.now(dt.timezone.utc)
+            birthdays_today = [
+                user_id for user_id, birthday in birthdays
+                if int(birthday.split("-")[0]) == today.month and int(birthday.split("-")[1]) == today.day
+            ]
+
+            # Refresh pinned message while preserving confetti
+            await update_pinned_birthday_message(
+                interaction.guild,
+                highlight_today=birthdays_today,
+                manual=True
+            )
+
+            # Sort upcoming first
             def upcoming_sort_key(b):
                 month, day = map(int, b[1].split("-"))
                 delta = (month - today.month) * 31 + (day - today.day)
                 return delta if delta >= 0 else delta + 12 * 31
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
 
-            # Pagination only if > 10
-            if len(birthdays_sorted) <= 10:
+            # Pagination only if > 20
+            if len(birthdays_sorted) <= 20:
                 content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(birthdays_sorted, interaction.guild)}"
                 await interaction.followup.send(content=content, ephemeral=True)
             else:
