@@ -92,7 +92,8 @@ class Birthdays(commands.Cog):
         birthday_str = f"{month:02d}-{day:02d}"
         try:
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
-            # Refresh pinned message after setting
+            
+            # Refresh pinned message with today's birthdays highlighted
             birthdays = await get_birthdays(str(interaction.guild.id))
             birthdays_today = [
                 user_id for user_id, bday in birthdays
@@ -108,7 +109,8 @@ class Birthdays(commands.Cog):
         human_readable = format_birthday_display(birthday_str)
         logger.info(f"🎂 {interaction.user} set birthday to {human_readable} in {interaction.guild.name}")
         await interaction.followup.send(
-            f"All done 💌 Your special day is marked as {human_readable}. Hugs are on the way!",
+            f"All done 💌 Your special day is marked as {human_readable}. Hugs are on the way!\n"
+            f"_- Tip: Use /setbirthday to add your own special day._",
             ephemeral=True
         )
 
@@ -120,7 +122,15 @@ class Birthdays(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
-            await update_pinned_birthday_message(interaction.guild)
+
+            # Refresh pinned message after deletion
+            birthdays = await get_birthdays(str(interaction.guild.id))
+            birthdays_today = [
+                user_id for user_id, bday in birthdays
+                if int(bday.split("-")[0]) == dt.datetime.now(dt.timezone.utc).month
+                and int(bday.split("-")[1]) == dt.datetime.now(dt.timezone.utc).day
+            ]
+            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
         except Exception as e:
             logger.error(f"Error deleting birthday for {interaction.user}: {e}")
             await interaction.followup.send("🚨 Failed to delete birthday. Try again later.", ephemeral=True)
@@ -147,14 +157,17 @@ class Birthdays(commands.Cog):
                 if int(birthday.split("-")[0]) == today.month and int(birthday.split("-")[1]) == today.day
             ]
 
+            # Refresh pinned message while preserving confetti
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
 
+            # Sort upcoming first
             def upcoming_sort_key(b):
                 month, day = map(int, b[1].split("-"))
                 delta = (month - today.month) * 31 + (day - today.day)
                 return delta if delta >= 0 else delta + 12 * 31
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
 
+            # Pagination only if > 20
             if len(birthdays_sorted) <= 20:
                 content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(birthdays_sorted, interaction.guild)}"
                 await interaction.followup.send(content=content, ephemeral=True)
@@ -168,6 +181,7 @@ class Birthdays(commands.Cog):
         except Exception as e:
             logger.error(f"Error viewing pinned birthday list by {interaction.user}: {e}")
             await interaction.followup.send("🚨 Failed to view birthday list. Try again later.", ephemeral=True)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Birthdays(bot))

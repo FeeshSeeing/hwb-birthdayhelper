@@ -70,7 +70,7 @@ class BirthdayList(commands.Cog):
                     title=f"🎂 Birthday List (Page {self.page+1}/{len(pages)})",
                     description=pages[self.page]
                 )
-                embed.set_footer(text="Use /refreshbirthdaylist to update pinned message")
+                embed.set_footer(text="Use /viewbirthdaylist to update pinned message")
                 await interaction_button.response.edit_message(embed=embed, view=self)
 
             @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.blurple)
@@ -89,7 +89,7 @@ class BirthdayList(commands.Cog):
             title=f"🎂 Birthday List (Page 1/{len(pages)})",
             description=pages[0]
         )
-        embed.set_footer(text="Use /refreshbirthdaylist to update pinned message")
+        embed.set_footer(text="Use /viewbirthdaylist to update pinned message")
         await interaction.response.send_message(embed=embed, view=BirthdayView(), ephemeral=False)
 
 
