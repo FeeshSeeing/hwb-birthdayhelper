@@ -5,6 +5,8 @@ import datetime as dt
 from database import DB_FILE, get_birthdays, get_guild_config
 from logger import logger
 
+MAX_PINNED_ENTRIES = 20  # Show only first 20 in pinned message
+
 def parse_day_month_input(day_input, month_input):
     """Validate and parse day and month input."""
     try:
@@ -65,7 +67,7 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
         # Sort birthdays based on upcoming date from today
         sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x[1]))
 
-        # ✅ If highlight_today provided, move them to bottom & add 🎉 mark
+        # ✅ Highlight today's birthdays and move them to bottom
         if highlight_today:
             sorted_birthdays = (
                 [b for b in sorted_birthdays if b[0] not in highlight_today]
@@ -73,12 +75,20 @@ async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: 
             )
 
         lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
-        for user_id, birthday in sorted_birthdays:
+        for idx, (user_id, birthday) in enumerate(sorted_birthdays):
+            if idx >= MAX_PINNED_ENTRIES:
+                break
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
             if highlight_today and user_id in highlight_today:
                 name = f"🎉 {name}"
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
+
+        # Add note if more birthdays exist
+        if len(sorted_birthdays) > MAX_PINNED_ENTRIES:
+            lines.append(
+                f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\nUse /birthdaylist to view the full list with pages."
+            )
 
         content = "\n".join(lines)
 

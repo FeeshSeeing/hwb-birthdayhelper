@@ -66,8 +66,9 @@ class Birthdays(commands.Cog):
         logger.info(f"🗑️ {interaction.user} deleted their birthday in {interaction.guild.name}")
         await interaction.followup.send("All done 🎈 Your birthday has been deleted.", ephemeral=True)
 
-    @app_commands.command(name="listbirthdays", description="Refresh and pin the birthday list")
-    async def listbirthdays(self, interaction: discord.Interaction):
+    # ✅ Renamed /listbirthdays -> /refreshbirthdaylist
+    @app_commands.command(name="refreshbirthdaylist", description="Refresh and pin the birthday list")
+    async def refreshbirthdaylist(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
             return
 

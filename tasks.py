@@ -2,7 +2,7 @@ import asyncio
 import discord
 import datetime as dt
 from database import get_guild_config, get_birthdays
-from utils import update_pinned_birthday_message  # <-- ADDED
+from utils import update_pinned_birthday_message  # <-- will pass today's birthdays
 
 already_wished_today = {}
 last_checked_date = None  # track last day to reset
@@ -31,8 +31,7 @@ async def check_and_send_birthdays(
         already_wished_today[guild_id] = set()
 
     birthdays = await get_birthdays(guild_id)
-    birthday_triggered = False  # track if any birthday triggered (for pinned refresh)
-
+    todays_birthdays = []  # <-- NEW: store today's user_ids
     for user_id, birthday in birthdays:
         b_month, b_day = map(int, birthday.split("-"))
 
@@ -51,7 +50,7 @@ async def check_and_send_birthdays(
             birthday_today = today_str == birthday
 
         if birthday_today and (ignore_wished or user_id not in already_wished_today[guild_id]):
-            birthday_triggered = True
+            todays_birthdays.append(user_id)
             member = guild.get_member(int(user_id))
             if member:
                 await channel.send(
@@ -71,10 +70,10 @@ async def check_and_send_birthdays(
             if not ignore_wished:
                 already_wished_today[guild_id].add(user_id)
 
-    # ✅ Refresh pinned birthday list if we sent any wishes
-    if birthday_triggered:
+    # ✅ Refresh pinned birthday list and highlight today's birthdays
+    if todays_birthdays:
         try:
-            await update_pinned_birthday_message(guild)
+            await update_pinned_birthday_message(guild, highlight_today=todays_birthdays)
         except Exception as e:
             print(f"[WARN] Could not refresh pinned message for {guild.name}: {e}")
 
