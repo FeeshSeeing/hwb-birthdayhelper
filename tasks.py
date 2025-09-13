@@ -61,13 +61,13 @@ async def check_and_send_birthdays(
                 already_wished_today[guild_id].add(user_id)
 
     try:
-        # Pass the list of today's birthdays to preserve confetti in pinned message
         await update_pinned_birthday_message(
             guild,
             highlight_today=todays_birthdays if todays_birthdays else None
         )
     except Exception as e:
         print(f"[WARN] Could not refresh pinned message for {guild.name}: {e}")
+
 
 async def remove_birthday_roles(guild: discord.Guild):
     config = await get_guild_config(str(guild.id))
@@ -85,6 +85,7 @@ async def remove_birthday_roles(guild: discord.Guild):
             except discord.Forbidden:
                 pass
 
+
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
     global already_wished_today, last_checked_date
 
@@ -93,7 +94,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
         today_str = now.strftime("%Y-%m-%d")
 
         if last_checked_date != today_str:
-            # Start of a new day
+            # New day
             for guild in bot.guilds:
                 await remove_birthday_roles(guild)
 
@@ -102,8 +103,13 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
 
             for guild in bot.guilds:
                 try:
-                    # Pass empty highlight_today to refresh pinned message without removing confetti
-                    await update_pinned_birthday_message(guild)
+                    # Compute today's birthdays to preserve confetti on first run
+                    birthdays = await get_birthdays(str(guild.id))
+                    birthdays_today = [
+                        user_id for user_id, birthday in birthdays
+                        if int(birthday.split("-")[0]) == now.month and int(birthday.split("-")[1]) == now.day
+                    ]
+                    await update_pinned_birthday_message(guild, highlight_today=birthdays_today)
                 except Exception as e:
                     print(f"[WARN] Could not refresh pinned message for {guild.name}: {e}")
 
@@ -111,6 +117,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
             await check_and_send_birthdays(guild)
 
         await asyncio.sleep(interval_minutes * 60)
+
 
 async def run_birthday_check_once(
     bot: discord.Client,

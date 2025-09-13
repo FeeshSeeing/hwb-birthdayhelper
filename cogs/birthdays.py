@@ -7,7 +7,7 @@ from utils import parse_day_month_input, format_birthday_display, update_pinned_
 from logger import logger
 import datetime as dt
 
-CONFETTI_ICON = "🎉"  # icon for users with birthday today
+CONFETTI_ICON = "🎉"
 
 # ----------------- Setup Check -----------------
 async def ensure_setup(interaction: discord.Interaction) -> bool:
@@ -22,11 +22,9 @@ async def ensure_setup(interaction: discord.Interaction) -> bool:
 
 # ---------------- Pagination Helpers ----------------
 def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = 20):
-    """Split birthdays into pages of `per_page` items."""
     return [birthdays[i:i + per_page] for i in range(0, len(birthdays), per_page)]
 
 def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
-    """Return a string for one page of birthdays, preserving confetti for today."""
     today = dt.datetime.now(dt.timezone.utc)
     lines = []
 
@@ -34,7 +32,6 @@ def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
         member = guild.get_member(int(user_id))
         name = member.display_name if member else f"<@{user_id}>"
         month, day = map(int, birthday.split("-"))
-
         prefix = CONFETTI_ICON + " " if month == today.month and day == today.day else "✦ "
         lines.append(f"{prefix}{name}: {format_birthday_display(birthday)}")
     return "\n".join(lines)
@@ -95,7 +92,14 @@ class Birthdays(commands.Cog):
         birthday_str = f"{month:02d}-{day:02d}"
         try:
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
-            await update_pinned_birthday_message(interaction.guild)
+            # Refresh pinned message after setting
+            birthdays = await get_birthdays(str(interaction.guild.id))
+            birthdays_today = [
+                user_id for user_id, bday in birthdays
+                if int(bday.split("-")[0]) == dt.datetime.now(dt.timezone.utc).month
+                and int(bday.split("-")[1]) == dt.datetime.now(dt.timezone.utc).day
+            ]
+            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
         except Exception as e:
             logger.error(f"Error setting birthday for {interaction.user}: {e}")
             await interaction.followup.send("🚨 Failed to set birthday. Try again later.", ephemeral=True)
@@ -143,21 +147,14 @@ class Birthdays(commands.Cog):
                 if int(birthday.split("-")[0]) == today.month and int(birthday.split("-")[1]) == today.day
             ]
 
-            # Refresh pinned message while preserving confetti
-            await update_pinned_birthday_message(
-                interaction.guild,
-                highlight_today=birthdays_today,
-                manual=True
-            )
+            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
 
-            # Sort upcoming first
             def upcoming_sort_key(b):
                 month, day = map(int, b[1].split("-"))
                 delta = (month - today.month) * 31 + (day - today.day)
                 return delta if delta >= 0 else delta + 12 * 31
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
 
-            # Pagination only if > 20
             if len(birthdays_sorted) <= 20:
                 content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{format_birthday_page(birthdays_sorted, interaction.guild)}"
                 await interaction.followup.send(content=content, ephemeral=True)
@@ -171,7 +168,6 @@ class Birthdays(commands.Cog):
         except Exception as e:
             logger.error(f"Error viewing pinned birthday list by {interaction.user}: {e}")
             await interaction.followup.send("🚨 Failed to view birthday list. Try again later.", ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Birthdays(bot))
