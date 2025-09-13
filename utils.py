@@ -31,8 +31,10 @@ def format_birthday_display(birthday_str):
     except:
         return birthday_str
 
-async def update_pinned_birthday_message(guild: discord.Guild):
-    """Update pinned message for the server with all birthdays sorted by upcoming date."""
+async def update_pinned_birthday_message(guild: discord.Guild, highlight_today: list[str] = None):
+    """Update pinned message for the server with all birthdays sorted by upcoming date.
+    Optionally highlight today's birthdays and move them to the bottom.
+    """
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")
@@ -58,18 +60,29 @@ async def update_pinned_birthday_message(guild: discord.Guild):
                 if not is_leap:
                     day = 28
             delta = (month - today_month) * 31 + (day - today_day)
-            return delta if delta >= 0 else delta + 12*31  # wrap around year
+            return delta if delta >= 0 else delta + 12 * 31  # wrap around year
 
         # Sort birthdays based on upcoming date from today
         sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x[1]))
+
+        # ✅ If highlight_today provided, move them to bottom & add 🎉 mark
+        if highlight_today:
+            sorted_birthdays = (
+                [b for b in sorted_birthdays if b[0] not in highlight_today]
+                + [b for b in sorted_birthdays if b[0] in highlight_today]
+            )
 
         lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
         for user_id, birthday in sorted_birthdays:
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
+            if highlight_today and user_id in highlight_today:
+                name = f"🎉 {name}"
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
+
         content = "\n".join(lines)
 
+    # Fetch or create pinned message
     async with aiosqlite.connect(DB_FILE) as db:
         async with db.execute(
             "SELECT value FROM config WHERE key=?", (f"pinned_birthday_msg_{guild.id}",)
