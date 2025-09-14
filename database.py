@@ -1,7 +1,6 @@
 import aiosqlite
 from logger import logger
-
-DB_FILE = "birthdays.db"
+from config import DB_FILE
 
 async def init_db():
     logger.info("Initializing database...")

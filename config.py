@@ -1,12 +1,5 @@
-import os
-import discord
-from dotenv import load_dotenv
+# config.py
 
-load_dotenv()
-TOKEN = os.getenv("DISCORD_TOKEN")
+# This file holds shared, static configuration variables.
 
 DB_FILE = "birthdays.db"
-
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True

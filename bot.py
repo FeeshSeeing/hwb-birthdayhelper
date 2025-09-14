@@ -2,7 +2,7 @@ import os
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from database import init_db
+from database import init_db, get_guild_config # Moved get_guild_config import here
 from logger import logger
 from tasks import birthday_check_loop
 import asyncio
@@ -10,71 +10,150 @@ import asyncio
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN is None:
+    # Use logger for critical errors before bot starts
+    logger.critical("DISCORD_TOKEN is not set in environment variables. Exiting.")
     raise RuntimeError("DISCORD_TOKEN is not set in environment variables.")
 
 intents = discord.Intents.default()
 intents.members = True
-intents.message_content = True
+intents.message_content = True # Required for some commands and message processing if needed
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+async def load_cogs():
+    """Loads all cogs into the bot."""
+    # List all cog files here explicitly, or use a loop to discover them
+    cogs = ["cogs.setup_cog", "cogs.birthdays", "cogs.admin", "cogs.testdate"]
+    for cog in cogs:
+        try:
+            await bot.load_extension(cog)
+            logger.info(f"Loaded cog: {cog}")
+        except Exception as e:
+            logger.error(f"Failed to load cog {cog}: {e}", exc_info=True)
+
+
 @bot.event
 async def on_ready():
-    logger.info(f"✅ Logged in as {bot.user}")
+    """Event that fires when the bot has successfully connected to Discord."""
+    logger.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
 
-    # Initialize database and background task
-    await init_db()
+    # Start the background birthday check loop
     bot.loop.create_task(birthday_check_loop(bot))
+    logger.info("Started background birthday check loop.")
 
-    await asyncio.sleep(1)
+    # Guild command sync strategy:
+    # 1. Copy global commands to all guilds (ensures all guilds get any globally defined commands)
+    # 2. Sync all guilds explicitly
+    # 3. Perform a global sync (slower, but catches any guilds not caught by the loop, and for global-only commands)
+    
+    # This loop is for ensuring *all* guilds have the latest commands upon bot startup.
+    # The `setup_cog.py` command already includes a `bot.tree.sync(guild=interaction.guild)`
+    # which will update a single guild immediately upon running /setup.
+    
+    # Note: Clearing commands (`bot.tree.clear_commands(guild=guild)`) should ONLY be used during development
+    # to force-reset commands. It should not be in production unless there's a specific reason.
+    # I'm removing it as per your previous instruction ("remove after first successful sync").
 
+    logger.info("Attempting to synchronize commands for all guilds...")
     for guild in bot.guilds:
         if guild is None:
-            continue  # skip invalid guilds
+            logger.warning("Skipping None guild during command sync.")
+            continue
         try:
-            # Clear old commands safely
-            bot.tree.clear_commands(guild=guild) # <- remove after first successful sync
-            logger.info(f"🗑️ Cleared old commands for {guild.name}")
-
-            # Sync new commands
+            # Copy global commands to this guild's tree, then sync specific guild
+            # This makes sure guild-specific commands (if any are added later) coexist with global ones.
+            bot.tree.copy_global_to(guild=guild)
             await bot.tree.sync(guild=guild)
-            logger.info(f"🔄 Synced new commands for {guild.name}")
-
+            logger.info(f"🔄 Synced commands for guild: {guild.name} (ID: {guild.id})")
+        except discord.Forbidden:
+            logger.warning(f"Bot lacks permissions to sync commands for guild {guild.name} (ID: {guild.id}).")
         except Exception as e:
-            logger.error(f"Failed to sync commands for {guild.name}: {e}")
+            logger.error(f"Failed to sync commands for guild {guild.name} (ID: {guild.id}): {e}", exc_info=True)
 
-    # sync globally (optional, slower to propagate)
+    # Finally, sync global commands (if any were not explicitly synced per-guild or are global-only)
     try:
         await bot.tree.sync()
-        logger.info("🌐 Global command sync complete")
+        logger.info("🌐 Global command sync complete.")
     except Exception as e:
-        logger.error(f"Failed to sync global commands: {e}")
+        logger.error(f"Failed to sync global commands: {e}", exc_info=True)
 
-async def load_cogs():
-    await bot.load_extension("cogs.setup_cog")
-    await bot.load_extension("cogs.birthdays")
-    await bot.load_extension("cogs.admin")
-    await bot.load_extension("cogs.testdate")
+    logger.info("Bot is fully ready and operational!")
+
 
 @bot.event
 async def on_guild_join(guild: discord.Guild):
-    from database import get_guild_config
-    config = await get_guild_config(str(guild.id))
-    channel = guild.get_channel(config["channel_id"]) if config and config.get("channel_id") else guild.system_channel
-    if channel:
+    """Event that fires when the bot joins a new guild."""
+    logger.info(f"🎉 Joined new guild: {guild.name} (ID: {guild.id})")
+
+    # Sync commands for the newly joined guild immediately
+    try:
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)
+        logger.info(f"Commands synced for newly joined guild {guild.name}.")
+    except discord.Forbidden:
+        logger.warning(f"Bot lacks permissions to sync commands for newly joined guild {guild.name} (ID: {guild.id}).")
+    except Exception as e:
+        logger.error(f"Error syncing commands for new guild {guild.name} (ID: {guild.id}): {e}", exc_info=True)
+
+
+    # Send a welcome message to the system channel or the first available text channel
+    # When bot first joins, get_guild_config will almost certainly be empty.
+    system_channel = guild.system_channel
+    target_channel = None
+
+    if system_channel and system_channel.permissions_for(guild.me).send_messages:
+        target_channel = system_channel
+    else:
+        # Fallback to the first text channel where the bot can send messages
+        for channel in guild.text_channels:
+            if channel.permissions_for(guild.me).send_messages:
+                target_channel = channel
+                break
+
+    if target_channel:
         try:
-            await channel.send(
-                "👋 Hello! Thanks for inviting me! Run /setup to configure the bot."
+            await target_channel.send(
+                f"👋 Hello! Thanks for inviting me to **{guild.name}**! "
+                "To get started, please have an admin run `/setup` to configure the birthday channel and roles."
             )
+            logger.info(f"Sent welcome message to {target_channel.name} in {guild.name}.")
         except discord.Forbidden:
-            print(f"Cannot send welcome message in {guild.name}")
+            logger.warning(f"Bot lacks permissions to send welcome message in {target_channel.name} ({target_channel.id}) in guild {guild.name}.")
+        except Exception as e:
+            logger.error(f"Error sending welcome message in {guild.name} (ID: {guild.id}): {e}", exc_info=True)
+    else:
+        logger.warning(f"Could not find any suitable channel to send welcome message in guild {guild.name} (ID: {guild.id}).")
+
 
 async def main():
+    """Main function to initialize the database, load cogs, and start the bot."""
+    logger.info("Starting bot initialization...")
+    await init_db() # Initialize DB once before loading cogs or starting tasks
+    logger.info("Database initialized.")
+
     await load_cogs()
-    await bot.start(TOKEN)
+    logger.info("All cogs loaded.")
+
+    try:
+        await bot.start(TOKEN)
+    except discord.LoginFailure:
+        logger.critical("Bot failed to log in. Check your DISCORD_TOKEN.")
+    except discord.HTTPException as e:
+        logger.critical(f"HTTPException during bot start: {e}", exc_info=True)
+    except Exception as e:
+        logger.critical(f"An unexpected error occurred during bot startup: {e}", exc_info=True)
+
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Bot stopped manually.")
+        logger.info("Bot stopped manually by KeyboardInterrupt.")
+    except RuntimeError as e:
+        # Catch RuntimeError for event loop closing issues, common during forced exits
+        if "Event loop is closed" not in str(e):
+            logger.critical(f"RuntimeError during bot shutdown: {e}", exc_info=True)
+        else:
+            logger.info("Event loop closed during shutdown (expected behavior for KeyboardInterrupt).")
+    except Exception as e:
+        logger.critical(f"An unhandled error occurred outside main: {e}", exc_info=True)
