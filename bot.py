@@ -4,7 +4,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 import asyncio
 import logging
-from config import BOT_TOKEN, GUILD_IDS  # GUILD_IDS = list of test guild IDs
+from config import BOT_TOKEN, GUILD_IDS
 from database import init_db
 from logger import logger
 
