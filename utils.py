@@ -160,27 +160,39 @@ async def update_pinned_birthday_message(
         
         if not pinned_msg:
             try:
+                # Always fetch the channel if get_channel failed
+                if not channel:
+                    channel = await guild.fetch_channel(channel_id)
+                
+                if not channel.permissions_for(guild.me).send_messages:
+                    logger.error(f"Bot cannot send messages in channel {channel.name} ({channel.id}) in guild {guild.name}.")
+                    return
+
                 pinned_msg = await channel.send(content)
                 logger.info(f"Created new pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
+
+                # Pin the message if bot has permission
                 if channel.permissions_for(guild.me).manage_messages:
                     try:
                         await pinned_msg.pin()
                         logger.info(f"Pinned new birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
                     except discord.Forbidden:
-                        logger.warning(f"Bot lacks permissions to pin message in channel {channel.name} ({channel.id}) in guild {guild.name}.")
+                        logger.warning(f"Bot lacks permissions to pin message in {channel.name} ({channel.id}) in guild {guild.name}.")
+                    except Exception as e:
+                        logger.error(f"Error pinning birthday message in {channel.name} ({channel.id}) in guild {guild.name}: {e}", exc_info=True)
                 else:
                     logger.warning(f"Bot lacks 'Manage Messages' permission to pin message in channel {channel.name} ({channel.id}) in guild {guild.name}.")
+
+                # Save the pinned message ID
+                async with aiosqlite.connect(DB_FILE) as db:
+                    await db.execute(
+                        "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+                        (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
+                    )
+                    await db.commit()
+                    logger.debug(f"📌 Pinned birthday message ID {pinned_msg.id} stored for guild {guild.name}")
+
             except discord.Forbidden:
                 logger.error(f"Bot lacks permissions to send messages in channel {channel.name} ({channel.id}) in guild {guild.name}. Cannot create or pin.")
-                return
             except Exception as e:
-                logger.error(f"Error sending new pinned message in channel {channel.name} ({channel.id}) in guild {guild.name}: {e}.", exc_info=True)
-                return
-
-        if pinned_msg:
-            await db.execute(
-                "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
-                (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
-            )
-            await db.commit()
-            logger.debug(f"📌 Pinned birthday message ID {pinned_msg.id} updated/stored for guild {guild.name}")
+                logger.error(f"Error sending new pinned message in channel {channel.name} ({channel.id}) in guild {guild.name}: {e}", exc_info=True)
