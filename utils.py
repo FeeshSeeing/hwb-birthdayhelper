@@ -47,7 +47,6 @@ def is_birthday_on_date(birthday_str: str, check_date: dt.datetime) -> bool:
     else:
         return check_date.month == b_month and check_date.day == b_day
 
-
 async def update_pinned_birthday_message(
     guild: discord.Guild,
     highlight_today: list[str] = None,
@@ -58,14 +57,22 @@ async def update_pinned_birthday_message(
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")
         return
 
-    channel = guild.get_channel(guild_config["channel_id"])
-    if not channel:
-        logger.warning(f"Channel not found for pinned message in guild {guild.name}. Configured ID: {guild_config['channel_id']}")
+    # Convert channel ID to int
+    try:
+        channel_id = int(guild_config["channel_id"])
+    except (TypeError, ValueError):
+        logger.error(f"Invalid channel ID in guild config for {guild.name}: {guild_config['channel_id']}")
         return
 
-    check_hour = guild_config.get("check_hour", 9)
-    birthdays = await get_birthdays(str(guild.id))
+    channel = guild.get_channel(channel_id)
+    if not channel:
+        logger.warning(f"Birthday channel not found for guild {guild.name} (ID: {guild.id}). Skipping check.")
+        return
 
+    # Get daily check hour, default 9 UTC
+    check_hour = guild_config.get("check_hour", 9)
+
+    birthdays = await get_birthdays(str(guild.id))
     if not birthdays:
         content = "📂 No birthdays found yet."
     else:
@@ -73,12 +80,13 @@ async def update_pinned_birthday_message(
 
         def upcoming_sort_key(b):
             month, day = map(int, b[1].split("-"))
-
+            
+            # Adjust day for Feb 29 in non-leap years
             if month == 2 and day == 29:
                 is_leap = (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0))
                 if not is_leap:
-                    day = 28
-
+                    day = 28 
+            
             try:
                 current_year_birthday = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
             except ValueError:
@@ -90,10 +98,10 @@ async def update_pinned_birthday_message(
                 except ValueError:
                     return float('inf')
                 return (next_year_birthday - today).total_seconds()
-
+            
             return (current_year_birthday - today).total_seconds()
 
-        sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
+        sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x))
         lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
         for idx, (user_id, birthday) in enumerate(sorted_birthdays):
             if idx >= MAX_PINNED_ENTRIES:
@@ -111,6 +119,7 @@ async def update_pinned_birthday_message(
 
         lines.append("\n> *💡 Tip: Use /setbirthday to add your own special day!*")
         lines.append(f"_Bot checks birthdays daily at {check_hour}:00 UTC_")
+
         content = "\n".join(lines)
 
     async with aiosqlite.connect(DB_FILE) as db:
@@ -119,49 +128,53 @@ async def update_pinned_birthday_message(
         ) as cursor:
             result = await cursor.fetchone()
         pinned_msg = None
-
+        
         if result:
             pinned_msg_id = int(result[0])
             try:
                 pinned_msg = await channel.fetch_message(pinned_msg_id)
-                logger.debug(f"Fetched existing pinned message {pinned_msg_id} for guild {guild.name}.")
+                logger.debug(f"Successfully fetched existing pinned message {pinned_msg_id} for guild {guild.name}.")
             except discord.NotFound:
+                logger.warning(f"Pinned message (ID: {pinned_msg_id}) not found in guild {guild.name}. Creating a new one.")
                 pinned_msg = None
             except discord.Forbidden:
+                logger.error(f"Bot lacks permissions to fetch pinned message (ID: {pinned_msg_id}) in guild {guild.name}. Creating a new one.")
                 pinned_msg = None
             except Exception as e:
-                logger.error(f"Error fetching pinned message {pinned_msg_id}: {e}")
+                logger.error(f"Error fetching pinned message (ID: {pinned_msg_id}) in guild {guild.name}: {e}. Creating a new one.", exc_info=True)
                 pinned_msg = None
 
         if pinned_msg:
             try:
                 await pinned_msg.edit(content=content)
-                logger.info(f"Edited pinned birthday message {pinned_msg.id} for guild {guild.name}.")
+                logger.info(f"Edited existing pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
             except discord.NotFound:
+                logger.warning(f"Pinned message (ID: {pinned_msg.id}) disappeared before edit in guild {guild.name}. Creating a new one.")
                 pinned_msg = None
             except discord.Forbidden:
+                logger.error(f"Bot lacks permissions to edit pinned message (ID: {pinned_msg.id}) in guild {guild.name}. Creating a new one.")
                 pinned_msg = None
             except Exception as e:
-                logger.error(f"Error editing pinned message {pinned_msg.id}: {e}")
+                logger.error(f"Error editing pinned message (ID: {pinned_msg.id}) in guild {guild.name}: {e}. Creating a new one.", exc_info=True)
                 pinned_msg = None
-
+        
         if not pinned_msg:
             try:
                 pinned_msg = await channel.send(content)
-                logger.info(f"Created new pinned birthday message {pinned_msg.id} for guild {guild.name}.")
+                logger.info(f"Created new pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
                 if channel.permissions_for(guild.me).manage_messages:
                     try:
                         await pinned_msg.pin()
-                        logger.info(f"Pinned birthday message {pinned_msg.id} for guild {guild.name}.")
+                        logger.info(f"Pinned new birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
                     except discord.Forbidden:
-                        logger.warning(f"Cannot pin message in {channel.name} ({guild.name}).")
+                        logger.warning(f"Bot lacks permissions to pin message in channel {channel.name} ({channel.id}) in guild {guild.name}.")
                 else:
-                    logger.warning(f"No 'Manage Messages' permission to pin in {channel.name} ({guild.name}).")
+                    logger.warning(f"Bot lacks 'Manage Messages' permission to pin message in channel {channel.name} ({channel.id}) in guild {guild.name}.")
             except discord.Forbidden:
-                logger.error(f"Cannot send message in {channel.name} ({guild.name}) to create pinned message.")
+                logger.error(f"Bot lacks permissions to send messages in channel {channel.name} ({channel.id}) in guild {guild.name}. Cannot create or pin.")
                 return
             except Exception as e:
-                logger.error(f"Error sending pinned message in {channel.name} ({guild.name}): {e}")
+                logger.error(f"Error sending new pinned message in channel {channel.name} ({channel.id}) in guild {guild.name}: {e}.", exc_info=True)
                 return
 
         if pinned_msg:
@@ -170,4 +183,4 @@ async def update_pinned_birthday_message(
                 (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
             )
             await db.commit()
-            logger.debug(f"Updated DB with pinned message ID {pinned_msg.id} for guild {guild.name}")
+            logger.debug(f"📌 Pinned birthday message ID {pinned_msg.id} updated/stored for guild {guild.name}")
