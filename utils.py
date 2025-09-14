@@ -57,35 +57,46 @@ async def update_pinned_birthday_message(
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")
         return None
 
-    # Convert channel ID to int
+    # Get channel ID
     try:
         channel_id = int(guild_config["channel_id"])
     except (TypeError, ValueError):
-        logger.error(f"Invalid channel ID in guild config for {guild.name}: {guild_config['channel_id']}")
+        logger.error(f"Invalid channel ID in guild config for {guild.name}: {guild_config.get('channel_id')}")
         return None
 
+    # Fetch channel reliably
     channel = guild.get_channel(channel_id)
     if not channel:
         try:
             channel = await guild.fetch_channel(channel_id)
+        except discord.NotFound:
+            logger.warning(f"Birthday channel not found for guild {guild.name} (ID: {channel_id}).")
+            return None
+        except discord.Forbidden:
+            logger.error(f"Cannot access channel {channel_id} in guild {guild.name}. Missing permissions.")
+            return None
         except Exception as e:
-            logger.error(f"Cannot fetch birthday channel {channel_id} in {guild.name}: {e}")
+            logger.error(f"Unexpected error fetching channel {channel_id} in {guild.name}: {e}")
             return None
 
-    # Get daily check hour, default 9 UTC
-    check_hour = guild_config.get("check_hour", 9)
+    # Check bot permissions
+    perms = channel.permissions_for(guild.me)
+    if not perms.send_messages:
+        logger.error(f"Bot cannot send messages in channel {channel.name} ({channel.id}) in guild {guild.name}.")
+        return None
 
+    check_hour = guild_config.get("check_hour", 9)
     birthdays = await get_birthdays(str(guild.id))
     today = dt.datetime.now(dt.timezone.utc)
 
-    # Prepare pinned message content
+    # Build message content
     if not birthdays:
         content = "📂 No birthdays found yet."
     else:
         def upcoming_sort_key(b):
             month, day = map(int, b[1].split("-"))
             if month == 2 and day == 29:
-                is_leap = (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0))
+                is_leap = today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0)
                 if not is_leap:
                     day = 28
             try:
@@ -93,14 +104,10 @@ async def update_pinned_birthday_message(
             except ValueError:
                 current_year_birthday = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
             if current_year_birthday < today and not is_birthday_on_date(b[1], today):
-                try:
-                    next_year_birthday = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
-                except ValueError:
-                    return float('inf')
-                return (next_year_birthday - today).total_seconds()
+                return (dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc) - today).total_seconds()
             return (current_year_birthday - today).total_seconds()
 
-        sorted_birthdays = sorted(birthdays, key=lambda x: upcoming_sort_key(x))
+        sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
         lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
         for idx, (user_id, birthday) in enumerate(sorted_birthdays):
             if idx >= MAX_PINNED_ENTRIES:
@@ -110,22 +117,16 @@ async def update_pinned_birthday_message(
             if highlight_today and str(user_id) in highlight_today:
                 name = f"{CONFETTI_ICON} {name}"
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
-
         if len(sorted_birthdays) > MAX_PINNED_ENTRIES:
-            lines.append(
-                f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\nUse /viewbirthdays to view the full list."
-            )
+            lines.append(f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\nUse /viewbirthdays to view the full list.")
         lines.append("\n> *💡 Tip: Use /setbirthday to add your own special day!*")
         lines.append(f"_Bot checks birthdays daily at {check_hour}:00 UTC_")
         content = "\n".join(lines)
 
     pinned_msg = None
     async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute(
-            "SELECT value FROM config WHERE key=?", (f"pinned_birthday_msg_{guild.id}",)
-        ) as cursor:
+        async with db.execute("SELECT value FROM config WHERE key=?", (f"pinned_birthday_msg_{guild.id}",)) as cursor:
             result = await cursor.fetchone()
-
         if result:
             try:
                 pinned_msg_id = int(result[0])
@@ -133,31 +134,27 @@ async def update_pinned_birthday_message(
             except Exception:
                 pinned_msg = None
 
+        # Edit existing message
         if pinned_msg:
             try:
                 await pinned_msg.edit(content=content)
-                logger.info(f"Edited existing pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
+                logger.info(f"Edited pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
             except Exception:
                 pinned_msg = None
 
+        # Create new pinned message if needed
         if not pinned_msg:
-            # Create a new message if none exists
             pinned_msg = await channel.send(content)
             logger.info(f"Created new pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
-
-            if channel.permissions_for(guild.me).manage_messages:
+            if perms.manage_messages:
                 try:
                     await pinned_msg.pin()
                     logger.info(f"Pinned new birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
                 except Exception as e:
                     logger.warning(f"Could not pin message in {guild.name}: {e}")
-
-            # Save new pinned message ID in DB
-            await db.execute(
-                "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
-                (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
-            )
+            await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id)))
             await db.commit()
-            logger.debug(f"📌 Pinned birthday message ID {pinned_msg.id} stored for guild {guild.name}")
+            logger.debug(f"Stored pinned birthday message ID {pinned_msg.id} for guild {guild.name}")
 
     return pinned_msg
+
