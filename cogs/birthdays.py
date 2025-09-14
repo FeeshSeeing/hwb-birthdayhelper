@@ -107,14 +107,22 @@ class Birthdays(commands.Cog):
         try:
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
 
-            # Update pinned birthday message with correct string IDs
+            # Update pinned birthday message with string IDs
             all_birthdays_in_guild = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [
                 str(user_id) for user_id, bday in all_birthdays_in_guild
                 if is_birthday_on_date(bday, today)
             ]
-            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+
+            # Ensure pinned
+            if pinned_msg and not pinned_msg.pinned:
+                try:
+                    await pinned_msg.pin()
+                    logger.info(f"Pinned birthday message for guild {interaction.guild.name} after setbirthday.")
+                except discord.Forbidden:
+                    logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
         except Exception as e:
             logger.error(f"Error setting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
@@ -144,7 +152,14 @@ class Birthdays(commands.Cog):
                 str(user_id) for user_id, bday in all_birthdays_in_guild
                 if is_birthday_on_date(bday, today)
             ]
-            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+
+            if pinned_msg and not pinned_msg.pinned:
+                try:
+                    await pinned_msg.pin()
+                    logger.info(f"Pinned birthday message for guild {interaction.guild.name} after deletebirthday.")
+                except discord.Forbidden:
+                    logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
         except Exception as e:
             logger.error(f"Error deleting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")

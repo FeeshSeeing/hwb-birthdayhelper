@@ -196,3 +196,4 @@ async def update_pinned_birthday_message(
                 logger.error(f"Bot lacks permissions to send messages in channel {channel.name} ({channel.id}) in guild {guild.name}. Cannot create or pin.")
             except Exception as e:
                 logger.error(f"Error sending new pinned message in channel {channel.name} ({channel.id}) in guild {guild.name}: {e}", exc_info=True)
+            return pinned_msg
