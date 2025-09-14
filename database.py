@@ -1,10 +1,9 @@
-
-
 # database.py
 import aiosqlite
 from config import DB_FILE
-from logger import logger # Make sure logger is imported
+from logger import logger
 
+# ---------------- Database Initialization ----------------
 async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
@@ -34,6 +33,7 @@ async def init_db():
     logger.info("✅ Database initialized.")
 
 
+# ---------------- Birthday Operations ----------------
 async def set_birthday(guild_id: str, user_id: str, birthday: str):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
@@ -55,7 +55,7 @@ async def delete_birthday(guild_id: str, user_id: str):
 
 
 async def get_birthdays(guild_id: str) -> list[tuple[str, str]]:
-    """Retrieves all birthdays for a specific guild."""
+    """Retrieve all birthdays for a specific guild."""
     try:
         async with aiosqlite.connect(DB_FILE) as db:
             cursor = await db.execute(
@@ -70,6 +70,7 @@ async def get_birthdays(guild_id: str) -> list[tuple[str, str]]:
         return []
 
 
+# ---------------- Guild Configuration ----------------
 async def set_guild_config(
     guild_id: str,
     channel_id: str,
@@ -107,6 +108,7 @@ async def get_guild_config(guild_id: str) -> dict | None:
         return None
 
 
+# ---------------- Generic Config ----------------
 async def set_config_value(key: str, value: str):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(

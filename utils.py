@@ -37,14 +37,12 @@ def format_birthday_display(birthday_str):
 
 
 def is_birthday_on_date(birthday_str: str, check_date: dt.datetime) -> bool:
-    """Checks if a given birthday string matches a specific date, handling Feb 29 leap year logic."""
     b_month, b_day = map(int, birthday_str.split("-"))
     if b_month == 2 and b_day == 29:
         is_leap_year = (check_date.year % 4 == 0 and (check_date.year % 100 != 0 or check_date.year % 400 == 0))
         return (check_date.month == 2 and check_date.day == 29 and is_leap_year) or \
                (check_date.month == 2 and check_date.day == 28 and not is_leap_year)
-    else:
-        return check_date.month == b_month and check_date.day == b_day
+    return check_date.month == b_month and check_date.day == b_day
 
 
 async def update_pinned_birthday_message(
@@ -52,6 +50,7 @@ async def update_pinned_birthday_message(
     highlight_today: list[str] = None,
     manual: bool = False
 ) -> discord.Message | None:
+
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")
@@ -79,7 +78,6 @@ async def update_pinned_birthday_message(
             logger.error(f"Unexpected error fetching channel {channel_id} in {guild.name}: {e}")
             return None
 
-    # Check bot permissions
     perms = channel.permissions_for(guild.me)
     if not perms.send_messages:
         logger.error(f"Bot cannot send messages in channel {channel.name} ({channel.id}) in guild {guild.name}.")
@@ -89,7 +87,7 @@ async def update_pinned_birthday_message(
     birthdays = await get_birthdays(str(guild.id))
     today = dt.datetime.now(dt.timezone.utc)
 
-    # Build message content
+    # Build pinned message content
     if not birthdays:
         content = "📂 No birthdays found yet."
     else:
@@ -117,6 +115,7 @@ async def update_pinned_birthday_message(
             if highlight_today and str(user_id) in highlight_today:
                 name = f"{CONFETTI_ICON} {name}"
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
+
         if len(sorted_birthdays) > MAX_PINNED_ENTRIES:
             lines.append(f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\nUse /viewbirthdays to view the full list.")
         lines.append("\n> *💡 Tip: Use /setbirthday to add your own special day!*")
@@ -134,7 +133,7 @@ async def update_pinned_birthday_message(
             except Exception:
                 pinned_msg = None
 
-        # Edit existing message
+        # Edit existing pinned message
         if pinned_msg:
             try:
                 await pinned_msg.edit(content=content)
@@ -157,4 +156,3 @@ async def update_pinned_birthday_message(
             logger.debug(f"Stored pinned birthday message ID {pinned_msg.id} for guild {guild.name}")
 
     return pinned_msg
-
