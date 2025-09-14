@@ -34,34 +34,20 @@ async def load_cogs():
 
 @bot.event
 async def on_ready():
-    """Event that fires when the bot has successfully connected to Discord."""
     logger.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
 
     # Start the background birthday check loop
     bot.loop.create_task(birthday_check_loop(bot))
     logger.info("Started background birthday check loop.")
 
-    # Guild command sync strategy:
-    # 1. Copy global commands to all guilds (ensures all guilds get any globally defined commands)
-    # 2. Sync all guilds explicitly
-    # 3. Perform a global sync (slower, but catches any guilds not caught by the loop, and for global-only commands)
-    
-    # This loop is for ensuring *all* guilds have the latest commands upon bot startup.
-    # The `setup_cog.py` command already includes a `bot.tree.sync(guild=interaction.guild)`
-    # which will update a single guild immediately upon running /setup.
-    
-    # Note: Clearing commands (`bot.tree.clear_commands(guild=guild)`) should ONLY be used during development
-    # to force-reset commands. It should not be in production unless there's a specific reason.
-    # I'm removing it as per your previous instruction ("remove after first successful sync").
+    logger.info("Attempting to synchronize commands...")
 
-    logger.info("Attempting to synchronize commands for all guilds...")
+    # Sync commands for all guilds
     for guild in bot.guilds:
         if guild is None:
             logger.warning("Skipping None guild during command sync.")
             continue
         try:
-            # Copy global commands to this guild's tree, then sync specific guild
-            # This makes sure guild-specific commands (if any are added later) coexist with global ones.
             bot.tree.copy_global_to(guild=guild)
             await bot.tree.sync(guild=guild)
             logger.info(f"🔄 Synced commands for guild: {guild.name} (ID: {guild.id})")
@@ -70,7 +56,7 @@ async def on_ready():
         except Exception as e:
             logger.error(f"Failed to sync commands for guild {guild.name} (ID: {guild.id}): {e}", exc_info=True)
 
-    # Finally, sync global commands (if any were not explicitly synced per-guild or are global-only)
+    # Global sync, important for non-guild specific commands or a final catch-all
     try:
         await bot.tree.sync()
         logger.info("🌐 Global command sync complete.")
