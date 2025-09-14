@@ -40,30 +40,6 @@ async def on_ready():
 
     logger.info("Attempting to synchronize commands...")
 
-    # --- START TEMPORARY AGGRESSIVE COMMAND CLEAR (FOR ONE RUN ONLY) ---
-    logger.warning("ATTENTION: AGGRESSIVELY CLEARING ALL GLOBAL AND GUILD COMMANDS. THIS IS FOR DEBUGGING DUPLICATES AND MUST BE REMOVED AFTER ONE SUCCESSFUL RUN.")
-    
-    # 1. Clear all global commands
-    bot.tree.clear_commands(guild=None)
-    await bot.tree.sync() # Sync to apply the global clear
-    logger.info("Global commands cleared and synced.")
-
-    # 2. Clear all guild commands for each guild
-    for guild in bot.guilds:
-        if guild is None:
-            continue
-        try:
-            bot.tree.clear_commands(guild=guild)
-            await bot.tree.sync(guild=guild) # Sync to apply the guild clear
-            logger.info(f"Commands cleared and synced for guild: {guild.name} (ID: {guild.id})")
-        except discord.Forbidden:
-            logger.warning(f"Bot lacks permissions to clear/sync commands for guild {guild.name} (ID: {guild.id}).")
-        except Exception as e:
-            logger.error(f"Failed to clear/sync commands for guild {guild.name} (ID: {guild.id}): {e}", exc_info=True)
-            
-    logger.warning("All commands cleared. Now attempting to re-sync all commands from scratch.")
-    # --- END TEMPORARY AGGRESSIVE COMMAND CLEAR ---
-
     # Now, re-sync all commands properly
     # This ensures global commands are copied to all guilds and then all are synced.
     for guild in bot.guilds:
