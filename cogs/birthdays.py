@@ -107,22 +107,14 @@ class Birthdays(commands.Cog):
         try:
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
 
-            # Update pinned birthday message
+            # Update pinned birthday message with correct string IDs
             all_birthdays_in_guild = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [
-                user_id for user_id, bday in all_birthdays_in_guild
+                str(user_id) for user_id, bday in all_birthdays_in_guild
                 if is_birthday_on_date(bday, today)
             ]
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
-
-            # Ensure pinned
-            if pinned_msg and not pinned_msg.pinned:
-                try:
-                    await pinned_msg.pin()
-                    logger.info(f"Pinned birthday message for guild {interaction.guild.name} after setbirthday.")
-                except discord.Forbidden:
-                    logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
+            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
 
         except Exception as e:
             logger.error(f"Error setting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
@@ -145,20 +137,14 @@ class Birthdays(commands.Cog):
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
 
+            # Update pinned birthday message with string IDs
             all_birthdays_in_guild = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [
-                user_id for user_id, bday in all_birthdays_in_guild
+                str(user_id) for user_id, bday in all_birthdays_in_guild
                 if is_birthday_on_date(bday, today)
             ]
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
-
-            if pinned_msg and not pinned_msg.pinned:
-                try:
-                    await pinned_msg.pin()
-                    logger.info(f"Pinned birthday message for guild {interaction.guild.name} after deletebirthday.")
-                except discord.Forbidden:
-                    logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
+            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
 
         except Exception as e:
             logger.error(f"Error deleting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
@@ -183,11 +169,12 @@ class Birthdays(commands.Cog):
 
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today_list = [
-                user_id for user_id, bday in birthdays
+                str(user_id) for user_id, bday in birthdays
                 if is_birthday_on_date(bday, today)
             ]
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today_list, manual=True)
 
+            # Sort and paginate
             def upcoming_sort_key(b):
                 month, day = map(int, b[1].split("-"))
                 if month == 2 and day == 29:
