@@ -1,12 +1,14 @@
+# setup_cog.py
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 import aiosqlite
-from config import DB_FILE # Corrected DB_FILE import source
-from database import get_birthdays # Added for update_pinned_birthday_message
-from utils import update_pinned_birthday_message, is_birthday_on_date # Added is_birthday_on_date for consistency
-from logger import logger # Added logger
-import datetime as dt # Added for is_birthday_on_date
+from config import DB_FILE
+from database import get_birthdays
+from utils import update_pinned_birthday_message, is_birthday_on_date
+from logger import logger
+import datetime as dt
 
 class SetupCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -20,7 +22,7 @@ class SetupCog(commands.Cog):
         channel="Channel to post birthdays",
         birthday_role="Role to assign on birthdays (optional)",
         mod_role="Moderator role (optional, only admins otherwise)",
-        check_hour="Hour to send birthday messages (0-23, UTC)(Default 9:00)" # Corrected description to UTC
+        check_hour="Hour to send birthday messages (0-23, UTC)(Default 9:00)"
     )
     async def setup(
         self,
@@ -30,7 +32,6 @@ class SetupCog(commands.Cog):
         mod_role: discord.Role = None,
         check_hour: int = 9
     ):
-        # Clamp check_hour to valid range
         check_hour = max(0, min(check_hour, 23))
 
         if not interaction.user.guild_permissions.administrator:
@@ -78,7 +79,9 @@ class SetupCog(commands.Cog):
 
             # Sync commands for this guild only, if the intent is immediate update
             try:
-                self.bot.tree.copy_global_to(guild=interaction.guild) # Copy global commands
+                # Remove this line: self.bot.tree.copy_global_to(guild=interaction.guild)
+                # If you have global commands, they should already be synced globally.
+                # If they are guild-specific, then copy_global_to is not needed.
                 await self.bot.tree.sync(guild=interaction.guild) # Sync specific guild
                 logger.info(f"Commands synced for guild {interaction.guild.name} ({interaction.guild.id})")
             except Exception as e:
@@ -87,7 +90,7 @@ class SetupCog(commands.Cog):
             # Send clear confirmation message
             confirmation_lines = [
                 "✅ HWB-BirthdayHelper is now configured!",
-                f"Birthdays will post in {channel.mention} at {check_hour}:00 UTC.", # Corrected description to UTC
+                f"Birthdays will post in {channel.mention} at {check_hour}:00 UTC.",
                 f"{'Birthday role: ' + birthday_role.mention if birthday_role else 'No birthday role set.'}",
                 f"{'Moderator role: ' + mod_role.mention if mod_role else 'Admin-only for mod commands.'}"
             ]

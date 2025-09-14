@@ -4,7 +4,7 @@ import os
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from database import init_db, get_guild_config
+from database import init_db
 from logger import logger
 from tasks import birthday_check_loop
 import asyncio
@@ -19,6 +19,8 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
+# Use commands.Bot for prefix commands if you have any, otherwise discord.Client is fine
+# If you only use slash commands, you can simplify to discord.Client, but commands.Bot is robust.
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def load_cogs():
@@ -35,33 +37,64 @@ async def load_cogs():
 async def on_ready():
     logger.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
 
-    bot.loop.create_task(birthday_check_loop(bot))
-    logger.info("Started background birthday check loop.")
+    # Start the background task only once
+    if not hasattr(bot, '_birthday_loop_started'):
+        bot.loop.create_task(birthday_check_loop(bot))
+        bot._birthday_loop_started = True # Mark as started
+        logger.info("Started background birthday check loop.")
 
     logger.info("Attempting to synchronize commands...")
 
-    # Now, re-sync all commands properly
-    # This ensures global commands are copied to all guilds and then all are synced.
+    # Clear all commands globally and then sync only once
+    # This is a drastic but effective way to ensure no duplicates.
+    # Use this if you want to completely reset the command tree.
+    # Otherwise, rely on guild-specific syncing only.
+    try:
+        # Clear all global commands
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync() # Sync global empty tree to clear them globally
+        logger.info("🌐 Cleared all global commands.")
+    except Exception as e:
+        logger.warning(f"Failed to clear global commands: {e}")
+
+    # Now, iterate through guilds and sync only local (guild-specific) commands.
+    # Global commands (if any are truly global, i.e., not copied) will be synced by bot.tree.sync()
+    # when you have no guild specified.
     for guild in bot.guilds:
         if guild is None:
             continue
         try:
-            bot.tree.copy_global_to(guild=guild) # Copy global commands to this guild's command tree
-            await bot.tree.sync(guild=guild) # Sync this specific guild's commands
-            logger.info(f"🔄 Re-synced commands for guild: {guild.name} (ID: {guild.id})")
+            # We don't copy_global_to here if we cleared global commands.
+            # Instead, ensure commands are defined with @app_commands.guilds for guild-specific.
+            # Or if you *do* want global commands, ensure your cogs define them as such.
+            # If your commands are *only* intended to be guild commands, this is fine.
+            await bot.tree.sync(guild=guild)
+            logger.info(f"🔄 Synced commands for guild: {guild.name} (ID: {guild.id})")
         except discord.Forbidden:
-            logger.warning(f"Bot lacks permissions to re-sync commands for guild {guild.name} (ID: {guild.id}).")
+            logger.warning(f"Bot lacks permissions to sync commands for guild {guild.name} (ID: {guild.id}).")
         except Exception as e:
-            logger.error(f"Failed to re-sync commands for guild {guild.name} (ID: {guild.id}): {e}", exc_info=True)
+            logger.error(f"Failed to sync commands for guild {guild.name} (ID: {guild.id}): {e}", exc_info=True)
 
-    # A final global sync for any truly global-only commands
+    # After iterating all guilds, if you have any truly global commands, sync them one last time.
+    # If all your commands are guild-specific (using @app_commands.guilds or copied),
+    # then this global sync might not be strictly necessary for functionality
+    # but it doesn't hurt.
     try:
-        await bot.tree.sync()
-        logger.info("🌐 Final global command re-sync complete.")
+        await bot.tree.sync() # Sync any remaining global commands
+        logger.info("🌐 Final global command sync complete (for any global commands).")
     except Exception as e:
-        logger.error(f"Failed to perform final global command re-sync: {e}", exc_info=True)
+        logger.error(f"Failed to perform final global command sync: {e}", exc_info=True)
 
     logger.info("Bot is fully ready and operational!")
+
+    logger.info("Clearing all old commands globally and for all guilds...")
+    try:
+        # Clear global commands
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync()
+        logger.info("Successfully cleared global commands.")
+    except Exception as e:
+        logger.error(f"Error clearing global commands: {e}")
 
 
 @bot.event
@@ -69,7 +102,8 @@ async def on_guild_join(guild: discord.Guild):
     logger.info(f"🎉 Joined new guild: {guild.name} (ID: {guild.id})")
 
     try:
-        bot.tree.copy_global_to(guild=guild)
+        # For a newly joined guild, explicitly sync its commands.
+        # This will include any commands that are defined as global if they haven't been copied and synced yet.
         await bot.tree.sync(guild=guild)
         logger.info(f"Commands synced for newly joined guild {guild.name}.")
     except discord.Forbidden:
