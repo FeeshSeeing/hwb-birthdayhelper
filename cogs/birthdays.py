@@ -98,33 +98,37 @@ class Birthdays(commands.Cog):
         result = parse_day_month_input(day, month)
         if not result:
             await interaction.followup.send("❗ Invalid day/month! Example: 25 12", ephemeral=True)
+            logger.warning(f"Invalid birthday input '{day} {month}' from {interaction.user} in {interaction.guild.name}")
             return
 
         day, month = result
         birthday_str = f"{month:02d}-{day:02d}"
 
         try:
+            # Save birthday
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
 
-            # Update pinned birthday message
+            # Fetch fresh data
             all_birthdays_in_guild = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [str(user_id) for user_id, bday in all_birthdays_in_guild if is_birthday_on_date(bday, today)]
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            birthdays_today = [str(uid) for uid, bday in all_birthdays_in_guild if is_birthday_on_date(bday, today)]
 
-            # Pin message if not pinned
+            # Update pinned message
+            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
             if pinned_msg and not pinned_msg.pinned:
                 try:
                     await pinned_msg.pin()
+                    logger.info(f"Pinned birthday message for guild {interaction.guild.name} after setbirthday.")
                 except discord.Forbidden:
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
         except Exception as e:
-            logger.error(f"Error setting birthday for {interaction.user} in {interaction.guild.name}: {e}")
+            logger.error(f"Error setting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
             await interaction.followup.send("🚨 Failed to set birthday. Try again later.", ephemeral=True)
             return
 
         human_readable = format_birthday_display(birthday_str)
+        logger.info(f"🎂 {interaction.user} ({interaction.user.id}) set birthday to {human_readable} in {interaction.guild.name}")
         await interaction.followup.send(
             f"All done 💌 Your special day is marked as {human_readable}. Hugs are on the way!",
             ephemeral=True
@@ -139,24 +143,26 @@ class Birthdays(commands.Cog):
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
 
-            # Update pinned birthday message
+            # Fetch fresh data
             all_birthdays_in_guild = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [str(user_id) for user_id, bday in all_birthdays_in_guild if is_birthday_on_date(bday, today)]
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            birthdays_today = [str(uid) for uid, bday in all_birthdays_in_guild if is_birthday_on_date(bday, today)]
 
-            # Pin if not pinned
+            # Update pinned message
+            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
             if pinned_msg and not pinned_msg.pinned:
                 try:
                     await pinned_msg.pin()
+                    logger.info(f"Pinned birthday message for guild {interaction.guild.name} after deletebirthday.")
                 except discord.Forbidden:
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
         except Exception as e:
-            logger.error(f"Error deleting birthday for {interaction.user} in {interaction.guild.name}: {e}")
+            logger.error(f"Error deleting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
             await interaction.followup.send("🚨 Failed to delete birthday. Try again later.", ephemeral=True)
             return
 
+        logger.info(f"🗑️ {interaction.user} ({interaction.user.id}) deleted their birthday in {interaction.guild.name}")
         await interaction.followup.send("All done 🎈 Your birthday has been deleted.", ephemeral=True)
 
     @app_commands.command(name="viewbirthdays", description="View the birthday list with pagination")
@@ -165,7 +171,6 @@ class Birthdays(commands.Cog):
             return
 
         await interaction.response.defer(ephemeral=True)
-
         try:
             birthdays = await get_birthdays(str(interaction.guild.id))
             if not birthdays:
@@ -173,13 +178,14 @@ class Birthdays(commands.Cog):
                 return
 
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [str(user_id) for user_id, bday in birthdays if is_birthday_on_date(bday, today)]
+            birthdays_today_list = [str(uid) for uid, bday in birthdays if is_birthday_on_date(bday, today)]
 
-            # Force update pinned message manually
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
+            # Update pinned message
+            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today_list, manual=True)
             if pinned_msg and not pinned_msg.pinned:
                 try:
                     await pinned_msg.pin()
+                    logger.info(f"Pinned birthday message for guild {interaction.guild.name} after viewbirthdays.")
                 except discord.Forbidden:
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
@@ -203,20 +209,13 @@ class Birthdays(commands.Cog):
                 return (current_year_birthday - today).total_seconds()
 
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
-            formatted_pages = [format_birthday_page(page, interaction.guild) for page in paginate_birthdays(birthdays_sorted, per_page=ENTRIES_PER_PAGE)]
-
-            # Send paginated view
             guild_config = await get_guild_config(str(interaction.guild.id))
             check_hour = guild_config.get("check_hour", 9)
             check_hour_info = f"_Bot checks birthdays daily at {check_hour}:00 UTC_"
 
+            formatted_pages = [format_birthday_page(page, interaction.guild) for page in paginate_birthdays(birthdays_sorted, per_page=ENTRIES_PER_PAGE)]
             if len(formatted_pages) <= 1:
-                content = (
-                    f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n"
-                    f"{formatted_pages[0]}\n\n"
-                    f"_- Tip: Use /setbirthday to add your own special day._\n"
-                    f"{check_hour_info}"
-                )
+                content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{formatted_pages[0]}\n\n_- Tip: Use /setbirthday to add your own special day._\n{check_hour_info}"
                 await interaction.followup.send(content=content, ephemeral=True)
             else:
                 formatted_pages[0] += f"\n\n_- Tip: Use /setbirthday to add your own special day._\n{check_hour_info}"
@@ -226,7 +225,7 @@ class Birthdays(commands.Cog):
                 view.message = await msg.original_response()
 
         except Exception as e:
-            logger.error(f"Error viewing birthday list in {interaction.guild.name}: {e}")
+            logger.error(f"Error viewing birthday list by {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
             await interaction.followup.send("🚨 Failed to view birthday list. Try again later.", ephemeral=True)
 
 # ---------------- Setup Cog ----------------
