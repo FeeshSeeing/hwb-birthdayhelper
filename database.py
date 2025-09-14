@@ -3,8 +3,9 @@ import aiosqlite
 from config import DB_FILE
 from logger import logger
 
-# ---------------- Database Initialization ----------------
+# -------------------- Initialize Database --------------------
 async def init_db():
+    """Create necessary tables if they do not exist."""
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS birthdays (
@@ -33,7 +34,7 @@ async def init_db():
     logger.info("✅ Database initialized.")
 
 
-# ---------------- Birthday Operations ----------------
+# -------------------- Birthday Operations --------------------
 async def set_birthday(guild_id: str, user_id: str, birthday: str):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
@@ -55,7 +56,6 @@ async def delete_birthday(guild_id: str, user_id: str):
 
 
 async def get_birthdays(guild_id: str) -> list[tuple[str, str]]:
-    """Retrieve all birthdays for a specific guild."""
     try:
         async with aiosqlite.connect(DB_FILE) as db:
             cursor = await db.execute(
@@ -70,7 +70,7 @@ async def get_birthdays(guild_id: str) -> list[tuple[str, str]]:
         return []
 
 
-# ---------------- Guild Configuration ----------------
+# -------------------- Guild Config Operations --------------------
 async def set_guild_config(
     guild_id: str,
     channel_id: str,
@@ -108,7 +108,7 @@ async def get_guild_config(guild_id: str) -> dict | None:
         return None
 
 
-# ---------------- Generic Config ----------------
+# -------------------- Generic Config Operations --------------------
 async def set_config_value(key: str, value: str):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
