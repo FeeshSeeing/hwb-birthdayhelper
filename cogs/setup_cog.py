@@ -1,5 +1,3 @@
-# setup_cog.py
-
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -74,20 +72,23 @@ class SetupCog(commands.Cog):
                 if is_birthday_on_date(bday, today)
             ]
 
-            # Update pinned birthday message
-            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            # Update pinned birthday message and ensure it is pinned
+            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            if pinned_msg and not pinned_msg.pinned:
+                try:
+                    await pinned_msg.pin()
+                    logger.info(f"Pinned birthday message for guild {interaction.guild.name} after setup.")
+                except discord.Forbidden:
+                    logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
-            # Sync commands for this guild only, if the intent is immediate update
+            # Sync commands for this guild only
             try:
-                # Remove this line: self.bot.tree.copy_global_to(guild=interaction.guild)
-                # If you have global commands, they should already be synced globally.
-                # If they are guild-specific, then copy_global_to is not needed.
-                await self.bot.tree.sync(guild=interaction.guild) # Sync specific guild
+                await self.bot.tree.sync(guild=interaction.guild)
                 logger.info(f"Commands synced for guild {interaction.guild.name} ({interaction.guild.id})")
             except Exception as e:
                 logger.error(f"Failed to sync commands for {interaction.guild.name} ({interaction.guild.id}): {e}")
 
-            # Send clear confirmation message
+            # Send confirmation message
             confirmation_lines = [
                 "✅ HWB-BirthdayHelper is now configured!",
                 f"Birthdays will post in {channel.mention} at {check_hour}:00 UTC.",
