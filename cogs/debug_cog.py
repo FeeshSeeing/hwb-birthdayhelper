@@ -18,7 +18,7 @@ class DebugCog(commands.Cog):
         async with aiosqlite.connect(DB_FILE) as db:
             try:
                 async with db.execute(
-                    "SELECT user_id, wished_date FROM wished_today WHERE guild_id = ?", (guild_id,)
+                    "SELECT user_id, date FROM wished_today WHERE guild_id = ?", (guild_id,)
                 ) as cursor:
                     rows = await cursor.fetchall()
 
@@ -27,7 +27,7 @@ class DebugCog(commands.Cog):
                     return
 
                 message = "\n".join(
-                    [f"<@{user_id}> — {wished_date}" for user_id, wished_date in rows]
+                    [f"<@{user_id}> — {date}" for user_id, date in rows]
                 )
                 await interaction.followup.send(
                     f"📋 **Already Wished Today:**\n{message}", ephemeral=True
