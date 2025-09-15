@@ -178,6 +178,8 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
     await ensure_wished_table()
     last_checked_date = None
     already_checked_guilds = set()
+    last_heartbeat = None
+    HEARTBEAT_INTERVAL = 30  # minutes
 
     # --- Initial Catch-Up ---
     logger.info("🟢 Running initial birthday check (catch-up) for all guilds")
@@ -192,6 +194,8 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
                 await check_and_send_birthdays(guild, ignore_wished=True)
                 already_checked_guilds.add(guild.id)
 
+    logger.info(f"🕒 Birthday check loop started (every {interval_minutes} minutes)...")
+
     # --- Main Loop ---
     while True:
         now = dt.datetime.now(dt.timezone.utc)
@@ -204,6 +208,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
             last_checked_date = today_str
             already_checked_guilds.clear()
 
+        # Check birthdays for each guild
         for guild in bot.guilds:
             config = await get_guild_config(str(guild.id))
             if not config or "check_hour" not in config:
@@ -220,8 +225,13 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
             else:
                 logger.debug(f"Skipping guild {guild.name}, current hour {current_hour} < check_hour {check_hour}")
 
-        await asyncio.sleep(interval_minutes * 60)
+        # --- Heartbeat log ---
+        if last_heartbeat is None or (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL * 60:
+            logger.info(f"💓 Birthday check loop alive at {now.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            last_heartbeat = now
 
+        await asyncio.sleep(interval_minutes * 60)
+        
 # -------------------- Run Once for Test --------------------
 async def run_birthday_check_once(
     bot: discord.Client,
