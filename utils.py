@@ -111,7 +111,7 @@ async def update_pinned_birthday_message(
         for idx, (user_id, birthday) in enumerate(sorted_birthdays[:MAX_PINNED_ENTRIES]):
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
-            if highlight_today and str(user_id) in highlight_today:
+            if highlight_today and str(user_id) in map(str, highlight_today):
                 name = f"{CONFETTI_ICON} {name}"
             lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
 
@@ -122,7 +122,7 @@ async def update_pinned_birthday_message(
             )
 
         lines.append("\n> *💡 Tip: Use /setbirthday to add your own special day!*")
-        lines.append(f"> *Bot checks birthdays daily at {check_hour}:00 UTC")
+        lines.append(f"> *Bot checks birthdays daily at {check_hour}:00 UTC*")
         content = "\n".join(lines)
 
     pinned_msg = None
@@ -150,9 +150,13 @@ async def update_pinned_birthday_message(
             try:
                 await pinned_msg.edit(content=content)
                 logger.info(f"Edited pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
+                # Pin refresh to force Discord highlight for today’s birthdays
+                if perms.manage_messages:
+                    await pinned_msg.unpin()
+                    await pinned_msg.pin()
             except Exception as e:
-                logger.warning(f"Failed to edit pinned message in {guild.name}: {e}")
-                pinned_msg = None  # Fallback to create new message
+                logger.warning(f"Failed to edit/pin message in {guild.name}: {e}")
+                pinned_msg = None  # fallback to create new message
 
         if not pinned_msg:
             pinned_msg = await channel.send(content)

@@ -142,14 +142,10 @@ async def check_and_send_birthdays(
             if not ignore_wished:
                 await mark_as_wished(guild_id, user_id, date_str)
 
-    # --- Update Pinned Message ---
+    # --- Update Pinned Message (reliability fix included) ---
     try:
-        if todays_birthdays:
-            await update_pinned_birthday_message(guild, highlight_today=todays_birthdays)
-            logger.info(f"✅ Updated pinned birthday message in {guild.name} with confetti for today!")
-        else:
-            await update_pinned_birthday_message(guild)
-            logger.info(f"Updated pinned birthday message in {guild.name} (no birthdays today).")
+        await update_pinned_birthday_message(guild, highlight_today=todays_birthdays)
+        logger.info(f"✅ Updated pinned birthday message in {guild.name} with confetti for today!")
     except Exception as e:
         logger.error(f"Failed to update pinned message for {guild.name}: {e}")
 
