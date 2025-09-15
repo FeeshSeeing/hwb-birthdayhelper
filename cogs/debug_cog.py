@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import aiosqlite
-from config import DB_PATH  # Make sure you have DB_PATH in your config
+from config import DB_FILE
 
 class DebugCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
