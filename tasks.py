@@ -22,6 +22,7 @@ async def ensure_wished_table():
         """)
         await db.commit()
 
+
 async def has_been_wished(guild_id: str, user_id: str, date_str: str) -> bool:
     async with aiosqlite.connect(DB_FILE) as db:
         async with db.execute(
@@ -29,6 +30,7 @@ async def has_been_wished(guild_id: str, user_id: str, date_str: str) -> bool:
             (guild_id, user_id, date_str)
         ) as cursor:
             return await cursor.fetchone() is not None
+
 
 async def mark_as_wished(guild_id: str, user_id: str, date_str: str):
     async with aiosqlite.connect(DB_FILE) as db:
@@ -38,11 +40,13 @@ async def mark_as_wished(guild_id: str, user_id: str, date_str: str):
         )
         await db.commit()
 
+
 async def clear_old_wishes(date_str: str):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("DELETE FROM wished_today WHERE date != ?", (date_str,))
         await db.commit()
         logger.info("🧹 Cleared old wished_today entries.")
+
 
 # -------------------- Birthday Check --------------------
 async def check_and_send_birthdays(
@@ -100,6 +104,7 @@ async def check_and_send_birthdays(
             todays_birthdays.append(user_id)
             member = guild.get_member(int(user_id))
             if member:
+                # --- Send Birthday Message ---
                 try:
                     await channel.send(
                         f"🎉 Happy Birthday, {member.mention}! 🎈\n"
@@ -109,6 +114,7 @@ async def check_and_send_birthdays(
                 except Exception as e:
                     logger.error(f"Failed to send birthday message in {guild.name}: {e}")
 
+                # --- Add Birthday Role ---
                 if role and role not in member.roles:
                     try:
                         await member.add_roles(role, reason="Birthday!")
@@ -139,6 +145,7 @@ async def check_and_send_birthdays(
     except Exception as e:
         logger.warning(f"Could not refresh pinned message for {guild.name}: {e}")
 
+
 # -------------------- Remove Birthday Roles --------------------
 async def remove_birthday_roles(guild: discord.Guild):
     config = await get_guild_config(str(guild.id))
@@ -161,41 +168,37 @@ async def remove_birthday_roles(guild: discord.Guild):
             except Exception as e:
                 logger.error(f"Error removing birthday role from {member.display_name} in {guild.name}: {e}")
 
+
 # -------------------- Birthday Check Loop --------------------
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
     await ensure_wished_table()
+    last_checked_date = None
 
-    # --- Catch-up on startup ---
-    now = dt.datetime.now(dt.timezone.utc)
-    logger.info("🟢 Running initial birthday check (catch-up) for all guilds")
-    for guild in bot.guilds:
-        if guild:
-            await check_and_send_birthdays(guild, ignore_wished=True)
-
-    # --- Main Loop ---
     while True:
         now = dt.datetime.now(dt.timezone.utc)
-        current_hour = now.hour
         today_str = now.strftime("%Y-%m-%d")
+        current_hour = now.hour
 
-        logger.debug(f"Running birthday loop for {today_str} (UTC hour {current_hour})")
-        await clear_old_wishes(today_str)
+        # --- Clear old wishes once per day ---
+        if last_checked_date != today_str:
+            await clear_old_wishes(today_str)
+            last_checked_date = today_str
 
         for guild in bot.guilds:
-            if guild:
-                config = await get_guild_config(str(guild.id))
-                check_hour = config.get("check_hour") if config else None
-                if check_hour is None:
-                    logger.debug(f"No check_hour set for guild {guild.name}, skipping timed check.")
-                    continue
+            config = await get_guild_config(str(guild.id))
+            if not config or "check_hour" not in config:
+                logger.debug(f"No check_hour set for guild {guild.name}, skipping check.")
+                continue
 
-                if current_hour == int(check_hour):
-                    await remove_birthday_roles(guild)
-                    await check_and_send_birthdays(guild)
-                else:
-                    logger.debug(f"Skipping guild {guild.name}, current hour {current_hour} != check_hour {check_hour}")
+            check_hour = int(config["check_hour"])
+            if current_hour >= check_hour:
+                await remove_birthday_roles(guild)
+                await check_and_send_birthdays(guild)
+            else:
+                logger.debug(f"Skipping guild {guild.name}, current hour {current_hour} < check_hour {check_hour}")
 
         await asyncio.sleep(interval_minutes * 60)
+
 
 # -------------------- Run Once for Test --------------------
 async def run_birthday_check_once(
