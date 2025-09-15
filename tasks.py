@@ -45,6 +45,10 @@ async def clear_old_wishes(date_str: str):
         logger.info("🧹 Cleared old wished_today entries.")
 
 # -------------------- Birthday Check --------------------
+# Dedup sets for missing warnings
+logged_missing_channels = set()
+logged_missing_roles = set()
+
 async def check_and_send_birthdays(
     guild: discord.Guild,
     today_override: dt.datetime = None,
@@ -62,9 +66,15 @@ async def check_and_send_birthdays(
     if channel:
         logger.info(f"Using birthday channel: {channel.name} ({channel.id}) in {guild.name}")
     else:
-        visible_channels = [(c.name, c.id) for c in guild.channels]
-        logger.warning(f"Birthday channel {channel_id} not found in guild {guild.name} ({guild.id}). "
-                       f"Visible channels: {visible_channels}")
+        if guild.id not in logged_missing_channels:
+            visible_channels = [(c.name, c.id) for c in guild.channels][:10]
+            if len(guild.channels) > 10:
+                visible_channels.append(("...", "..."))
+            logger.warning(
+                f"Birthday channel {channel_id} not found in guild {guild.name} ({guild.id}). "
+                f"Visible channels (first 10): {visible_channels}"
+            )
+            logged_missing_channels.add(guild.id)
         return
 
     # --- Role ---
@@ -73,10 +83,15 @@ async def check_and_send_birthdays(
     if role:
         logger.info(f"Using birthday role: {role.name} ({role.id}) in {guild.name}")
     else:
-        if role_id:
-            visible_roles = [(r.name, r.id) for r in guild.roles]
-            logger.warning(f"Birthday role {role_id} not found in guild {guild.name} ({guild.id}). "
-                           f"Visible roles: {visible_roles}")
+        if role_id and guild.id not in logged_missing_roles:
+            visible_roles = [(r.name, r.id) for r in guild.roles][:10]
+            if len(guild.roles) > 10:
+                visible_roles.append(("...", "..."))
+            logger.warning(
+                f"Birthday role {role_id} not found in guild {guild.name} ({guild.id}). "
+                f"Visible roles (first 10): {visible_roles}"
+            )
+            logged_missing_roles.add(guild.id)
 
     now = today_override or dt.datetime.now(dt.timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
@@ -137,6 +152,8 @@ async def check_and_send_birthdays(
         logger.warning(f"Could not refresh pinned message for {guild.name}: {e}")
 
 # -------------------- Remove Birthday Roles --------------------
+already_logged_missing_roles_remove = set()
+
 async def remove_birthday_roles(guild: discord.Guild):
     config = await get_guild_config(str(guild.id))
     if not config or not config.get("birthday_role_id"):
@@ -145,7 +162,9 @@ async def remove_birthday_roles(guild: discord.Guild):
     role_id = config.get("birthday_role_id")
     role = guild.get_role(role_id)
     if not role:
-        logger.warning(f"Birthday role {role_id} not found in guild {guild.name}. Skipping role removal.")
+        if guild.id not in already_logged_missing_roles_remove:
+            logger.warning(f"Birthday role {role_id} not found in guild {guild.name}. Skipping role removal.")
+            already_logged_missing_roles_remove.add(guild.id)
         return
 
     for member in guild.members:
