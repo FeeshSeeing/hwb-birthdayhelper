@@ -15,7 +15,7 @@ class DebugCog(commands.Cog):
         await interaction.response.defer(thinking=True, ephemeral=True)
 
         guild_id = str(interaction.guild.id)
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with aiosqlite.connect(DB_FILE) as db:
             try:
                 async with db.execute(
                     "SELECT user_id, wished_date FROM wished_today WHERE guild_id = ?", (guild_id,)
@@ -42,7 +42,7 @@ class DebugCog(commands.Cog):
         await interaction.response.defer(thinking=True, ephemeral=True)
 
         guild_id = str(interaction.guild.id)
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with aiosqlite.connect(DB_FILE) as db:
             try:
                 await db.execute("DELETE FROM wished_today WHERE guild_id = ?", (guild_id,))
                 await db.commit()
