@@ -10,7 +10,6 @@ DB_FILE = "birthdays.db"
 
 # -------------------- Wished Table --------------------
 async def ensure_wished_table():
-    """Create wished_today table if it doesn't exist."""
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         CREATE TABLE IF NOT EXISTS wished_today (
@@ -45,11 +44,13 @@ async def clear_old_wishes(date_str: str):
         logger.info("🧹 Cleared old wished_today entries.")
 
 # -------------------- Birthday Check --------------------
+# Dedup sets for missing warnings
 logged_missing_channels = set()
 logged_missing_roles = set()
-logged_missing_roles_remove = set()
+already_logged_missing_roles_remove = set()
 
 async def check_and_send_birthdays(
+    bot: discord.Client,
     guild: discord.Guild,
     today_override: dt.datetime = None,
     ignore_wished: bool = False
@@ -63,47 +64,53 @@ async def check_and_send_birthdays(
     # --- Channel ---
     channel_id = config.get("channel_id")
     channel = guild.get_channel(channel_id)
-    if not channel and guild.id not in logged_missing_channels:
-        visible_channels = [(c.name, c.id) for c in guild.channels][:10]
-        if len(guild.channels) > 10:
-            visible_channels.append(("...", "..."))
-        logger.warning(f"Birthday channel {channel_id} not found in guild {guild.name} ({guild.id}). "
-                       f"Visible channels (first 10): {visible_channels}")
-        logged_missing_channels.add(guild.id)
-        return
-    elif channel:
-        logger.info(f"Using birthday channel: {channel.name} ({channel.id}) in {guild.name}")
+    if not channel:
+        try:
+            channel = await bot.fetch_channel(channel_id)
+        except discord.NotFound:
+            if guild.id not in logged_missing_channels:
+                visible_channels = [(c.name, c.id) for c in guild.channels][:10]
+                if len(guild.channels) > 10:
+                    visible_channels.append(("...", "..."))
+                logger.warning(
+                    f"Birthday channel {channel_id} not found in guild {guild.name} ({guild.id}). "
+                    f"Visible channels (first 10): {visible_channels}"
+                )
+                logged_missing_channels.add(guild.id)
+            return
 
     # --- Role ---
     role_id = config.get("birthday_role_id")
     role = guild.get_role(role_id) if role_id else None
-    if not role and role_id and guild.id not in logged_missing_roles:
-        visible_roles = [(r.name, r.id) for r in guild.roles][:10]
-        if len(guild.roles) > 10:
-            visible_roles.append(("...", "..."))
-        logger.warning(f"Birthday role {role_id} not found in guild {guild.name} ({guild.id}). "
-                       f"Visible roles (first 10): {visible_roles}")
-        logged_missing_roles.add(guild.id)
-    elif role:
-        logger.info(f"Using birthday role: {role.name} ({role.id}) in {guild.name}")
+    if not role and role_id:
+        try:
+            role = await guild.fetch_role(role_id)
+        except discord.NotFound:
+            if guild.id not in logged_missing_roles:
+                visible_roles = [(r.name, r.id) for r in guild.roles][:10]
+                if len(guild.roles) > 10:
+                    visible_roles.append(("...", "..."))
+                logger.warning(
+                    f"Birthday role {role_id} not found in guild {guild.name} ({guild.id}). "
+                    f"Visible roles (first 10): {visible_roles}"
+                )
+                logged_missing_roles.add(guild.id)
 
     now = today_override or dt.datetime.now(dt.timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
+
     birthdays = await get_birthdays(guild_id)
     todays_birthdays = []
-
-    logger.debug(f"Checking birthdays in {guild.name} for {now.strftime('%d/%m/%Y')} (UTC). "
-                 f"Found {len(birthdays)} entries in DB.")
 
     for user_id, birthday in birthdays:
         if is_birthday_on_date(birthday, now):
             if not ignore_wished and await has_been_wished(guild_id, user_id, date_str):
-                logger.debug(f"Skipping {user_id} in {guild.name} (already wished today).")
                 continue
 
             todays_birthdays.append(user_id)
             member = guild.get_member(int(user_id))
             if member:
+                # --- Send Message ---
                 try:
                     await channel.send(
                         f"🎉 Happy Birthday, {member.mention}! 🎈\n"
@@ -120,20 +127,28 @@ async def check_and_send_birthdays(
                         logger.info(f"Added birthday role to {member.display_name} in {guild.name}")
                     except discord.Forbidden:
                         logger.warning(f"Cannot add birthday role to {member.display_name} in {guild.name}")
-                        await channel.send(f"⚠️ Cannot add birthday role to {member.mention}. Check permissions.", delete_after=10)
+                        await channel.send(
+                            f"⚠️ Cannot add birthday role to {member.mention}. Check permissions.",
+                            delete_after=10
+                        )
                     except Exception as e:
                         logger.error(f"Error adding birthday role to {member.display_name} in {guild.name}: {e}")
-                        await channel.send(f"🚨 Error adding birthday role to {member.mention}. Try again later.", delete_after=10)
+                        await channel.send(
+                            f"🚨 Error adding birthday role to {member.mention}. Try again later.",
+                            delete_after=10
+                        )
 
             if not ignore_wished:
                 await mark_as_wished(guild_id, user_id, date_str)
 
     # --- Update Pinned Message ---
     try:
-        await update_pinned_birthday_message(guild, highlight_today=todays_birthdays or None)
+        await update_pinned_birthday_message(
+            guild,
+            highlight_today=todays_birthdays if todays_birthdays else None
+        )
     except Exception as e:
         logger.warning(f"Could not refresh pinned message for {guild.name}: {e}")
-
 
 # -------------------- Remove Birthday Roles --------------------
 async def remove_birthday_roles(guild: discord.Guild):
@@ -143,10 +158,14 @@ async def remove_birthday_roles(guild: discord.Guild):
 
     role_id = config.get("birthday_role_id")
     role = guild.get_role(role_id)
-    if not role and guild.id not in logged_missing_roles_remove:
-        logger.warning(f"Birthday role {role_id} not found in guild {guild.name}. Skipping role removal.")
-        logged_missing_roles_remove.add(guild.id)
-        return
+    if not role:
+        try:
+            role = await guild.fetch_role(role_id)
+        except discord.NotFound:
+            if guild.id not in already_logged_missing_roles_remove:
+                logger.warning(f"Birthday role {role_id} not found in guild {guild.name}. Skipping role removal.")
+                already_logged_missing_roles_remove.add(guild.id)
+            return
 
     for member in guild.members:
         if role in member.roles:
@@ -158,14 +177,14 @@ async def remove_birthday_roles(guild: discord.Guild):
             except Exception as e:
                 logger.error(f"Error removing birthday role from {member.display_name} in {guild.name}: {e}")
 
-
 # -------------------- Birthday Check Loop --------------------
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
     await ensure_wished_table()
     last_checked_date = None
     already_checked_guilds = set()
 
-    # --- Initial Catch-Up ---
+    # --- Short delay for cache population ---
+    await asyncio.sleep(5)
     logger.info("🟢 Running initial birthday check (catch-up) for all guilds")
     now = dt.datetime.now(dt.timezone.utc)
     for guild in bot.guilds:
@@ -174,7 +193,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
             check_hour = int(config["check_hour"])
             if now.hour >= check_hour:
                 await remove_birthday_roles(guild)
-                await check_and_send_birthdays(guild, ignore_wished=True)
+                await check_and_send_birthdays(bot, guild, ignore_wished=True)
                 already_checked_guilds.add(guild.id)
 
     # --- Main Loop ---
@@ -183,11 +202,10 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
         today_str = now.strftime("%Y-%m-%d")
         current_hour = now.hour
 
-        # --- Clear old wishes once per day ---
         if last_checked_date != today_str:
             await clear_old_wishes(today_str)
             last_checked_date = today_str
-            already_checked_guilds.clear()  # Reset daily check tracking
+            already_checked_guilds.clear()
 
         for guild in bot.guilds:
             config = await get_guild_config(str(guild.id))
@@ -199,19 +217,18 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
                 continue
             if current_hour >= check_hour:
                 await remove_birthday_roles(guild)
-                await check_and_send_birthdays(guild)
+                await check_and_send_birthdays(bot, guild)
                 already_checked_guilds.add(guild.id)
 
         await asyncio.sleep(interval_minutes * 60)
-
 
 # -------------------- Run Once for Test --------------------
 async def run_birthday_check_once(bot: discord.Client, guild: discord.Guild = None, test_date: dt.datetime = None):
     await ensure_wished_table()
     if guild:
         await remove_birthday_roles(guild)
-        await check_and_send_birthdays(guild, today_override=test_date, ignore_wished=True)
+        await check_and_send_birthdays(bot, guild, today_override=test_date, ignore_wished=True)
     else:
         for g in bot.guilds:
             await remove_birthday_roles(g)
-            await check_and_send_birthdays(g, today_override=test_date, ignore_wished=True)
+            await check_and_send_birthdays(bot, g, today_override=test_date, ignore_wished=True)
