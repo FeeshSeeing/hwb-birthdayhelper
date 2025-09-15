@@ -1,3 +1,4 @@
+# bot.py
 import discord
 from discord.ext import commands
 import asyncio
@@ -17,14 +18,12 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # -------------------- Logging --------------------
 logging.basicConfig(level=logging.INFO)
-birthday_task = None  # Keep task alive
+birthday_task = None  # Keep task reference
 BIRTHDAY_INTERVAL = 5  # minutes
 
-# -------------------- Startup --------------------
+# -------------------- Startup Events --------------------
 @bot.event
 async def on_ready():
-    global birthday_task
-
     logger.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
     logger.info("🌐 Syncing slash commands...")
 
@@ -41,20 +40,32 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Error syncing commands: {e}")
 
-    # Start birthday loop
-    if birthday_task is None or birthday_task.done():
-        birthday_task = bot.loop.create_task(birthday_check_loop(bot, interval_minutes=BIRTHDAY_INTERVAL))
-        logger.info(f"🕒 Birthday check loop started (every {BIRTHDAY_INTERVAL} minutes).")
-
     logger.info("🎉 Bot is fully ready and operational!")
 
-# -------------------- Initialize Database --------------------
+# -------------------- Start Birthday Loop Safely --------------------
+async def start_birthday_loop():
+    """Wait until bot is ready, then start the birthday check loop."""
+    await bot.wait_until_ready()
+    await asyncio.sleep(2)  # Small delay to ensure guild/member cache is populated
+    global birthday_task
+    if birthday_task is None or birthday_task.done():
+        logger.info(f"🕒 Starting birthday check loop (every {BIRTHDAY_INTERVAL} minutes)...")
+        birthday_task = asyncio.create_task(birthday_check_loop(bot, interval_minutes=BIRTHDAY_INTERVAL))
+
+# -------------------- Database Setup --------------------
 async def setup_database():
     await init_db()
+    logger.info("✅ Database initialized.")
 
 # -------------------- Load Cogs --------------------
 async def load_all_cogs():
-    cog_list = ["cogs.birthdays", "cogs.admin", "cogs.setup_cog", "cogs.testdate", "cogs.debug_cog"]
+    cog_list = [
+        "cogs.birthdays",
+        "cogs.admin",
+        "cogs.setup_cog",
+        "cogs.testdate",
+        "cogs.debug_cog"
+    ]
     for cog in cog_list:
         try:
             await bot.load_extension(cog)
@@ -63,12 +74,19 @@ async def load_all_cogs():
             logger.error(f"Failed to load cog {cog}: {e}")
     logger.info("✅ All cogs loaded.")
 
-# -------------------- Main --------------------
+# -------------------- Main Entry Point --------------------
 async def main():
     async with bot:
+        # Setup database and cogs
         await setup_database()
         await load_all_cogs()
+
+        # Start birthday loop after bot is ready
+        asyncio.create_task(start_birthday_loop())
+
+        # Start the bot
         await bot.start(BOT_TOKEN)
 
+# -------------------- Run Bot --------------------
 if __name__ == "__main__":
     asyncio.run(main())
