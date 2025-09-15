@@ -1,12 +1,13 @@
 # bot.py
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord import app_commands
 import asyncio
 import logging
 from config import BOT_TOKEN, GUILD_IDS
 from database import init_db
 from logger import logger
+from tasks import birthday_check_loop  # Import the loop
 
 # -------------------- Intents --------------------
 intents = discord.Intents.default()
@@ -54,14 +55,17 @@ async def load_all_cogs():
             logger.error(f"Failed to load cog {cog}: {e}")
     logger.info("✅ All cogs loaded.")
 
-
 # -------------------- Main --------------------
 async def main():
     async with bot:
         await setup_database()
         await load_all_cogs()
-        await bot.start(BOT_TOKEN)
 
+        # --- Start birthday loop in background ---
+        bot.loop.create_task(birthday_check_loop(bot, interval_minutes=60))
+        logger.info("🕒 Birthday check loop started (every 60 minutes).")
+
+        await bot.start(BOT_TOKEN)
 
 if __name__ == "__main__":
     asyncio.run(main())
