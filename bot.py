@@ -1,13 +1,12 @@
 # bot.py
 import discord
 from discord.ext import commands
-from discord import app_commands
 import asyncio
 import logging
 from config import BOT_TOKEN, GUILD_IDS
 from database import init_db
 from logger import logger
-from tasks import birthday_check_loop  # Import the loop
+from tasks import birthday_check_loop
 
 # -------------------- Intents --------------------
 intents = discord.Intents.default()
@@ -19,8 +18,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # -------------------- Logging --------------------
 logging.basicConfig(level=logging.INFO)
-
-birthday_task = None  # Global reference to keep the task alive
+birthday_task = None  # Keep task alive
+BIRTHDAY_INTERVAL = 5  # minutes
 
 # -------------------- Startup --------------------
 @bot.event
@@ -43,10 +42,10 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Error syncing commands: {e}")
 
-    # Ensure birthday loop starts only once
+    # Start birthday loop
     if birthday_task is None or birthday_task.done():
-        birthday_task = bot.loop.create_task(birthday_check_loop(bot, interval_minutes=60))
-        logger.info("🕒 Birthday check loop started (every 60 minutes).")
+        birthday_task = bot.loop.create_task(birthday_check_loop(bot, interval_minutes=BIRTHDAY_INTERVAL))
+        logger.info(f"🕒 Birthday check loop started (every {BIRTHDAY_INTERVAL} minutes).")
 
     logger.info("🎉 Bot is fully ready and operational!")
 
