@@ -1,12 +1,51 @@
 import asyncio
 import discord
 import datetime as dt
+import aiosqlite
 from database import get_guild_config, get_birthdays
 from utils import update_pinned_birthday_message, is_birthday_on_date
 from logger import logger
 
-already_wished_today = {}
-last_checked_date = None  # Track last day to reset
+DB_FILE = "birthdays.db"
+
+
+async def ensure_wished_table():
+    """Create wished_today table if it doesn't exist."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS wished_today (
+            guild_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            PRIMARY KEY (guild_id, user_id, date)
+        )
+        """)
+        await db.commit()
+
+
+async def has_been_wished(guild_id: str, user_id: str, date_str: str) -> bool:
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT 1 FROM wished_today WHERE guild_id = ? AND user_id = ? AND date = ?",
+            (guild_id, user_id, date_str)
+        ) as cursor:
+            return await cursor.fetchone() is not None
+
+
+async def mark_as_wished(guild_id: str, user_id: str, date_str: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO wished_today (guild_id, user_id, date) VALUES (?, ?, ?)",
+            (guild_id, user_id, date_str)
+        )
+        await db.commit()
+
+
+async def clear_old_wishes(date_str: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("DELETE FROM wished_today WHERE date != ?", (date_str,))
+        await db.commit()
+        logger.info("🧹 Cleared old wished_today entries.")
 
 
 async def check_and_send_birthdays(
@@ -14,8 +53,6 @@ async def check_and_send_birthdays(
     today_override: dt.datetime = None,
     ignore_wished: bool = False
 ):
-    global already_wished_today
-
     guild_id = str(guild.id)
     config = await get_guild_config(guild_id)
     if not config:
@@ -28,9 +65,7 @@ async def check_and_send_birthdays(
         return
 
     now = today_override or dt.datetime.now(dt.timezone.utc)
-
-    if guild_id not in already_wished_today:
-        already_wished_today[guild_id] = set()
+    date_str = now.strftime("%Y-%m-%d")
 
     birthdays = await get_birthdays(guild_id)
     todays_birthdays = []
@@ -38,7 +73,11 @@ async def check_and_send_birthdays(
     logger.debug(f"Checking birthdays in {guild.name} for {now.strftime('%d/%m/%Y')} (UTC). Found {len(birthdays)} entries.")
 
     for user_id, birthday in birthdays:
-        if is_birthday_on_date(birthday, now) and (ignore_wished or user_id not in already_wished_today[guild_id]):
+        if is_birthday_on_date(birthday, now):
+            if not ignore_wished and await has_been_wished(guild_id, user_id, date_str):
+                logger.debug(f"Skipping {user_id} in {guild.name} (already wished today).")
+                continue
+
             todays_birthdays.append(user_id)
             member = guild.get_member(int(user_id))
             if member:
@@ -69,10 +108,11 @@ async def check_and_send_birthdays(
                                 f"🚨 Error adding birthday role to {member.mention}. Please try again later.",
                                 delete_after=10
                             )
-            if not ignore_wished:
-                already_wished_today[guild_id].add(user_id)
 
-    # Always refresh the pinned message (highlight today's birthdays)
+            if not ignore_wished:
+                await mark_as_wished(guild_id, user_id, date_str)
+
+    # Refresh pinned message with today's highlights
     try:
         await update_pinned_birthday_message(
             guild,
@@ -104,26 +144,18 @@ async def remove_birthday_roles(guild: discord.Guild):
 
 
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 60):
-    global already_wished_today, last_checked_date
+    await ensure_wished_table()
 
     while True:
         now = dt.datetime.now(dt.timezone.utc)
         today_str = now.strftime("%Y-%m-%d")
 
-        if last_checked_date != today_str:
-            # New day → reset everything
-            logger.info(f"🌅 New day detected: {today_str}. Resetting birthday roles & wishes.")
+        logger.debug(f"Running birthday loop for {today_str}")
+        await clear_old_wishes(today_str)
 
-            for guild in bot.guilds:
-                if guild:
-                    await remove_birthday_roles(guild)
-
-            already_wished_today = {}
-            last_checked_date = today_str
-
-        # Run birthday check for all guilds
         for guild in bot.guilds:
             if guild:
+                await remove_birthday_roles(guild)
                 await check_and_send_birthdays(guild)
 
         await asyncio.sleep(interval_minutes * 60)
@@ -134,6 +166,8 @@ async def run_birthday_check_once(
     guild: discord.Guild = None,
     test_date: dt.datetime = None
 ):
+    await ensure_wished_table()
+
     if guild:
         await remove_birthday_roles(guild)
         await check_and_send_birthdays(guild, today_override=test_date, ignore_wished=True)

@@ -20,13 +20,17 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # -------------------- Logging --------------------
 logging.basicConfig(level=logging.INFO)
 
+birthday_task = None  # Global reference to keep the task alive
+
 # -------------------- Startup --------------------
 @bot.event
 async def on_ready():
+    global birthday_task
+
     logger.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
     logger.info("🌐 Syncing slash commands...")
+
     try:
-        # You can limit sync to specific guilds during testing
         if GUILD_IDS:
             for guild_id in GUILD_IDS:
                 guild = bot.get_guild(guild_id)
@@ -38,6 +42,12 @@ async def on_ready():
             logger.info("🌐 Synced commands globally")
     except Exception as e:
         logger.error(f"Error syncing commands: {e}")
+
+    # Ensure birthday loop starts only once
+    if birthday_task is None or birthday_task.done():
+        birthday_task = bot.loop.create_task(birthday_check_loop(bot, interval_minutes=60))
+        logger.info("🕒 Birthday check loop started (every 60 minutes).")
+
     logger.info("🎉 Bot is fully ready and operational!")
 
 # -------------------- Initialize Database --------------------
@@ -46,7 +56,7 @@ async def setup_database():
 
 # -------------------- Load Cogs --------------------
 async def load_all_cogs():
-    cog_list = ["cogs.birthdays", "cogs.admin", "cogs.setup_cog", "cogs.testdate"]
+    cog_list = ["cogs.birthdays", "cogs.admin", "cogs.setup_cog", "cogs.testdate", "cogs.debug_cog"]
     for cog in cog_list:
         try:
             await bot.load_extension(cog)
@@ -60,11 +70,6 @@ async def main():
     async with bot:
         await setup_database()
         await load_all_cogs()
-
-        # --- Start birthday loop in background ---
-        bot.loop.create_task(birthday_check_loop(bot, interval_minutes=60))
-        logger.info("🕒 Birthday check loop started (every 60 minutes).")
-
         await bot.start(BOT_TOKEN)
 
 if __name__ == "__main__":
