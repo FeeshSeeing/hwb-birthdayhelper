@@ -181,6 +181,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
 
     # --- Initial Catch-Up ---
     logger.info("🟢 Running initial birthday check (catch-up) for all guilds")
+    await asyncio.sleep(5)  # Wait 5 seconds for cache to fill
     now = dt.datetime.now(dt.timezone.utc)
     for guild in bot.guilds:
         config = await get_guild_config(str(guild.id))
