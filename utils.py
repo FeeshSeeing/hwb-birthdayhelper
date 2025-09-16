@@ -116,6 +116,7 @@ async def update_pinned_birthday_message(
                 name = f"{CONFETTI_ICON} {name}"
 
             lines.append(f"・{name} - {format_birthday_display(birthday)}")
+            lines.append(f"\n\n")
 
         # Footer lines in small text (-#)
         if len(sorted_birthdays) > MAX_PINNED_ENTRIES:
