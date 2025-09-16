@@ -51,17 +51,24 @@ class BirthdayPages(View):
         self.pages = pages
         self.guild = guild
         self.current = 0
+        self.message = None
+
+        # Disable buttons if only one page
         if len(pages) <= 1:
             for child in self.children:
                 child.disabled = True
-        self.message = None
 
     async def update_message(self, interaction: discord.Interaction):
+        """Use this for button callbacks to update ephemeral messages correctly."""
         content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{self.pages[self.current]}"
         content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
-        await interaction.response.edit_message(content=content, view=self)
+        try:
+            await interaction.edit_original_response(content=content, view=self)
+        except Exception as e:
+            logger.error(f"Failed to update birthday page in guild {self.guild.name}: {e}")
 
     async def on_timeout(self):
+        """Disable buttons after timeout."""
         for child in self.children:
             child.disabled = True
         if self.message:
@@ -76,19 +83,14 @@ class BirthdayPages(View):
     async def previous(self, button: Button, interaction: discord.Interaction):
         if self.current > 0:
             self.current -= 1
-            await self.update_message(interaction)
-        else:
-            button.disabled = True
-            await interaction.response.edit_message(view=self)
+        await self.update_message(interaction)
 
     @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
     async def next(self, button: Button, interaction: discord.Interaction):
         if self.current < len(self.pages) - 1:
             self.current += 1
-            await self.update_message(interaction)
-        else:
-            button.disabled = True
-            await interaction.response.edit_message(view=self)
+        await self.update_message(interaction)
+
 
 
 # ---------------- Birthday Commands ----------------
