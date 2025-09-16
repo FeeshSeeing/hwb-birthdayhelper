@@ -42,10 +42,7 @@ async def set_birthday(guild_id: str, user_id: str, birthday: str, username: str
             (guild_id, user_id, birthday)
         )
         await db.commit()
-    user_display = username if username else user_id
-    logger.info(f"🎂 Birthday saved for user {user_display} in guild {guild_id}: {birthday}")
-
-
+         
 async def delete_birthday(guild_id: str, user_id: str, username: str | None = None):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
@@ -53,10 +50,6 @@ async def delete_birthday(guild_id: str, user_id: str, username: str | None = No
             (guild_id, user_id)
         )
         await db.commit()
-    user_display = username if username else user_id
-    logger.info(f"🗑️ Birthday deleted for user {user_display} in guild {guild_id}")
-
-
 async def get_birthdays(guild_id: str) -> list[tuple[str, str]]:
     try:
         async with aiosqlite.connect(DB_FILE) as db:
