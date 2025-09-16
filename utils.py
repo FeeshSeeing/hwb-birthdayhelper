@@ -85,7 +85,7 @@ class BirthdayPages(discord.ui.View):
         content += "\n\n"  # extra spacing before footer
         content += "-# 💡 Tip: Use /setbirthday to add your own special day!\n"
         content += f"-# ⏰ Bot checks birthdays daily at {self.check_hour}:00 UTC"
-        if len(self.pages) > 1 and len(self.pages[0]) == MAX_PINNED_ENTRIES:
+        if len(self.pages) > 1:
             content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
 
         try:
@@ -109,7 +109,7 @@ async def update_pinned_birthday_message(
     highlight_today: list[str] = None,
     manual: bool = False
 ) -> discord.Message | None:
-    """Update (or create if missing) the pinned birthday message, with buttons and footer."""
+    """Update (or create) the pinned birthday message with content + buttons."""
 
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
@@ -119,9 +119,10 @@ async def update_pinned_birthday_message(
     try:
         channel_id = int(guild_config["channel_id"])
     except (TypeError, ValueError):
-        logger.error(f"Invalid channel ID in guild config for {guild.name}: {guild_config.get('channel_id')}")
+        logger.error(f"Invalid channel ID for {guild.name}: {guild_config.get('channel_id')}")
         return None
 
+    # Fetch channel
     channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
     perms = channel.permissions_for(guild.me)
     if not perms.send_messages:
@@ -139,7 +140,7 @@ async def update_pinned_birthday_message(
             await pinned_msg.pin()
         return pinned_msg
 
-    # --- Sort birthdays ---
+    # Sort upcoming birthdays
     def upcoming_sort_key(b):
         month, day = map(int, b[1].split("-"))
         if month == 2 and day == 29:
@@ -156,14 +157,37 @@ async def update_pinned_birthday_message(
 
     sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
 
-    # --- Pagination ---
+    # Pagination
     pages = [sorted_birthdays[i:i + MAX_PINNED_ENTRIES] for i in range(0, len(sorted_birthdays), MAX_PINNED_ENTRIES)]
     view = BirthdayPages(pages, guild, check_hour)
+    view.current = 0  # always start on first page after update
+
+    # Generate content for first page
+    page_content = []
+    for uid, bday in pages[0]:
+        member = guild.get_member(int(uid))
+        name = member.display_name if member else f"<@{uid}>"
+        prefix = "・" + (CONFETTI_ICON if is_birthday_on_date(bday, today) else "")
+        page_content.append(f"{prefix}{name} - {format_birthday_display(bday)}")
+
+    content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n"
+    content += "\n".join(page_content)
+    content += "\n\n"  # extra spacing
+    content += "-# 💡 Tip: Use /setbirthday to add your own special day!\n"
+    content += f"-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
+
+    # Only show page info if multiple pages exist
+    if len(pages) > 1:
+        content += f"\n\nPage 1/{len(pages)}"
 
     pinned_msg = None
     async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("SELECT value FROM config WHERE key=?", (f"pinned_birthday_msg_{guild.id}",)) as cursor:
+        # Fetch stored pinned message ID
+        async with db.execute(
+            "SELECT value FROM config WHERE key=?", (f"pinned_birthday_msg_{guild.id}",)
+        ) as cursor:
             result = await cursor.fetchone()
+
         if result:
             try:
                 pinned_msg_id = int(result[0])
@@ -171,26 +195,27 @@ async def update_pinned_birthday_message(
             except discord.NotFound:
                 pinned_msg = None
 
-        if pinned_msg:
-            try:
-                await pinned_msg.edit(view=view)
-            except Exception as e:
-                logger.warning(f"Failed to edit pinned message in {guild.name}: {e}")
-                pinned_msg = None
-
-        if not pinned_msg:
-            pinned_msg = await channel.send(view=view)
-            if perms.manage_messages:
-                try:
-                    await pinned_msg.pin()
-                except Exception:
-                    pass
+        # Update or create pinned message
+        try:
+            if pinned_msg:
+                await pinned_msg.edit(content=content, view=view)
+            else:
+                pinned_msg = await channel.send(content=content, view=view)
+                if perms.manage_messages:
+                    try:
+                        await pinned_msg.pin()
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error(f"Failed to update pinned message in {guild.name}: {e}")
+            pinned_msg = None
 
         # Store pinned message ID
-        await db.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
-            (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
-        )
-        await db.commit()
+        if pinned_msg:
+            await db.execute(
+                "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+                (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
+            )
+            await db.commit()
 
     return pinned_msg
