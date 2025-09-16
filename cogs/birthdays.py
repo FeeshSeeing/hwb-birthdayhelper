@@ -10,7 +10,6 @@ import datetime as dt
 CONFETTI_ICON = "🎉"
 ENTRIES_PER_PAGE = 20
 
-
 # ----------------- Setup Check -----------------
 async def ensure_setup(interaction: discord.Interaction) -> bool:
     guild_config = await get_guild_config(str(interaction.guild.id))
@@ -22,19 +21,16 @@ async def ensure_setup(interaction: discord.Interaction) -> bool:
         return False
     return True
 
-
 # ---------------- Pagination Helpers ----------------
 def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = ENTRIES_PER_PAGE):
     return [birthdays[i:i + per_page] for i in range(0, len(birthdays), per_page)]
-
 
 def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, test_mode: bool = False):
     today = dt.datetime.now(dt.timezone.utc)
     lines = []
     for idx, (user_id, birthday) in enumerate(page):
         if test_mode:
-            # Generate fake display names for testing
-            name = f"User{int(user_id[-3:]):03d}"  # last 3 digits of fake ID
+            name = f"User{int(user_id[-3:]):03d}"  # fake display name for test
         else:
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
@@ -42,7 +38,6 @@ def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, test
         prefix = CONFETTI_ICON + " " if is_birthday_on_date(birthday, today) else "・"
         lines.append(f"{prefix}{name} - {format_birthday_display(birthday)}")
     return "\n".join(lines)
-
 
 # ---------------- Pagination View ----------------
 class BirthdayPages(View):
@@ -59,17 +54,14 @@ class BirthdayPages(View):
                 child.disabled = True
 
     async def update_message(self, interaction: discord.Interaction):
-        """Update ephemeral message for pagination."""
         content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{self.pages[self.current]}"
         content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
         try:
-            # ✅ Correct usage: interaction.edit_original_response
             await interaction.edit_original_response(content=content, view=self)
         except Exception as e:
             logger.error(f"Failed to update birthday page in guild {self.guild.name}: {e}")
 
     async def on_timeout(self):
-        """Disable buttons after timeout."""
         for child in self.children:
             child.disabled = True
         if self.message:
@@ -92,7 +84,6 @@ class BirthdayPages(View):
             self.current += 1
         await self.update_message(interaction)
 
-
 # ---------------- Birthday Commands ----------------
 class Birthdays(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -114,18 +105,15 @@ class Birthdays(commands.Cog):
 
         try:
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
-
             all_birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-
             pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
             if pinned_msg and not pinned_msg.pinned:
                 try:
                     await pinned_msg.pin()
                 except discord.Forbidden:
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}")
-
         except Exception as e:
             logger.error(f"Error setting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
             await interaction.followup.send("🚨 Failed to set birthday. Try again later.", ephemeral=True)
@@ -142,18 +130,15 @@ class Birthdays(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
-
             all_birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-
             pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
             if pinned_msg and not pinned_msg.pinned:
                 try:
                     await pinned_msg.pin()
                 except discord.Forbidden:
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}")
-
         except Exception as e:
             logger.error(f"Error deleting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
             await interaction.followup.send("🚨 Failed to delete birthday. Try again later.", ephemeral=True)
@@ -175,7 +160,6 @@ class Birthdays(commands.Cog):
 
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [str(uid) for uid, bday in birthdays if is_birthday_on_date(bday, today)]
-
             pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
             if pinned_msg and not pinned_msg.pinned:
                 try:
@@ -196,8 +180,8 @@ class Birthdays(commands.Cog):
 
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
 
-            # --- TEMPORARY TEST MODE ---
-            TEST_MODE = True  # Change to False after testing
+            # --- TEST MODE ---
+            TEST_MODE = True
             formatted_pages = [format_birthday_page(page, interaction.guild, test_mode=TEST_MODE)
                                for page in paginate_birthdays(birthdays_sorted)]
 
@@ -206,18 +190,17 @@ class Birthdays(commands.Cog):
 
             if len(formatted_pages) == 1:
                 content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}\n\n-# 💡 Tip: Use /setbirthday to add your own special day!\n-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
-                await interaction.followup.send(content=content, ephemeral=True)
+                await interaction.edit_original_response(content=content)
             else:
                 formatted_pages[0] += f"\n\n-# 💡 Tip: Use /setbirthday to add your own special day!\n-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
                 view = BirthdayPages(formatted_pages, interaction.guild)
                 content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}"
-                msg = await interaction.followup.send(content=content, view=view, ephemeral=True)
-                view.message = await msg.original_response()
+                await interaction.edit_original_response(content=content, view=view)
+                view.message = await interaction.original_response()  # store for timeout edits
 
         except Exception as e:
             logger.error(f"Error viewing birthday list by {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
             await interaction.followup.send("🚨 Failed to view birthday list. Try again later.", ephemeral=True)
-
 
 # ---------------- Setup Cog ----------------
 async def setup(bot: commands.Bot):
