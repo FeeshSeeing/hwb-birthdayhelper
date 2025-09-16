@@ -194,7 +194,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
     last_checked_date = None
     already_checked_guilds = set()
     last_heartbeat = None
-    HEARTBEAT_INTERVAL = 30  # minutes
+    HEARTBEAT_INTERVAL = 5  # minutes
 
     logger.info("🟢 Initial birthday check (catch-up) starting...")
     await asyncio.sleep(5)
