@@ -67,38 +67,61 @@ async def check_and_send_birthdays(
         logger.warning(f"⚠️ No config found for guild {guild.name} ({guild.id}) — skipping.")
         return
 
-    # --- Channel ---
+ # --- Channel ---
     channel_id = config.get("channel_id")
     logger.debug(f"Config for {guild.name}: channel_id={channel_id}, birthday_role_id={config.get('birthday_role_id')}")
+
     channel = guild.get_channel(channel_id)
     if not channel:
-        if guild.id not in logged_missing_channels:
-            visible_channels = [(c.name, c.id) for c in guild.channels][:10]
-            if len(guild.channels) > 10:
-                visible_channels.append(("...", "..."))
-            logger.warning(
-                f"❌ Birthday channel {channel_id} not found in guild {guild.name} ({guild.id}). "
-                f"Visible channels (first 10): {visible_channels}"
-            )
-            logged_missing_channels.add(guild.id)
-        return
+        try:
+            channel = await guild.fetch_channel(channel_id)
+            logger.info(f"✅ Fetched birthday channel {channel.name} ({channel.id}) via API for {guild.name}")
+        except discord.NotFound:
+            if guild.id not in logged_missing_channels:
+                visible_channels = [(c.name, c.id) for c in guild.channels][:10]
+                if len(guild.channels) > 10:
+                    visible_channels.append(("...", "..."))
+                logger.warning(
+                    f"❌ Birthday channel {channel_id} not found in guild {guild.name}. "
+                    f"Visible channels (first 10): {visible_channels}"
+                )
+                logged_missing_channels.add(guild.id)
+            return
+        except discord.Forbidden:
+            logger.error(f"⚠️ Cannot access birthday channel {channel_id} in {guild.name} (missing permissions).")
+            return
+        except Exception as e:
+            logger.error(f"❌ Unexpected error fetching birthday channel {channel_id} in {guild.name}: {e}")
+            return
+
     logger.info(f"✅ Using birthday channel: {channel.name} ({channel.id}) in {guild.name}")
 
-    # --- Role ---
+# --- Role ---
     role_id = config.get("birthday_role_id")
-    role = guild.get_role(role_id) if role_id else None
-    if not role and role_id:
-        if guild.id not in logged_missing_roles:
-            visible_roles = [(r.name, r.id) for r in guild.roles][:10]
-            if len(guild.roles) > 10:
-                visible_roles.append(("...", "..."))
-            logger.warning(
-                f"❌ Birthday role {role_id} not found in guild {guild.name}. "
-                f"Visible roles (first 10): {visible_roles}"
-            )
-            logged_missing_roles.add(guild.id)
-    elif role:
-        logger.debug(f"✅ Using birthday role: {role.name} ({role.id})")
+    role = None
+
+    if role_id:
+        role = guild.get_role(role_id)
+        if not role:
+            try:
+                role = await guild.fetch_role(role_id)
+                logger.info(f"✅ Fetched birthday role {role.name} ({role.id}) via API for {guild.name}")
+            except discord.NotFound:
+                if guild.id not in logged_missing_roles:
+                    visible_roles = [(r.name, r.id) for r in guild.roles][:10]
+                    if len(guild.roles) > 10:
+                        visible_roles.append(("...", "..."))
+                    logger.warning(
+                        f"❌ Birthday role {role_id} not found in guild {guild.name}. "
+                        f"Visible roles (first 10): {visible_roles}"
+                    )
+                    logged_missing_roles.add(guild.id)
+            except discord.Forbidden:
+                logger.error(f"⚠️ Cannot access birthday role {role_id} in {guild.name} (missing permissions).")
+            except Exception as e:
+                logger.error(f"❌ Unexpected error fetching birthday role {role_id} in {guild.name}: {e}")
+        else:
+            logger.debug(f"✅ Using birthday role: {role.name} ({role.id})")
 
     now = today_override or dt.datetime.now(dt.timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
