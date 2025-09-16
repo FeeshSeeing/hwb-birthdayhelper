@@ -191,6 +191,7 @@ async def remove_birthday_roles(guild: discord.Guild):
 # -------------------- Birthday Check Loop --------------------
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
     await ensure_wished_table()
+    logger.info(f"🕒 Birthday check loop started (every {interval_minutes} minutes)")
     last_checked_date = None
     already_checked_guilds = set()
     last_heartbeat = None
@@ -210,7 +211,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
                 await check_and_send_birthdays(guild, ignore_wished=True)
                 already_checked_guilds.add(guild.id)
 
-    logger.info(f"🕒 Birthday check loop started (every {interval_minutes} minutes)")
+    
 
     while True:
         logger.info(f"💡 Birthday loop tick at {dt.datetime.now(dt.timezone.utc)}")
