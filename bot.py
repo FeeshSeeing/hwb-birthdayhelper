@@ -49,9 +49,18 @@ async def start_birthday_loop():
     await bot.wait_until_ready()
     logger.info(f"🕒 Starting birthday check loop (every {BIRTHDAY_INTERVAL} minutes)...")
     await asyncio.sleep(2)  # Small delay to ensure guild/member cache is populated
+
     global birthday_task
     if birthday_task is None or birthday_task.done():
-        birthday_task = asyncio.create_task(birthday_check_loop(bot, interval_minutes=BIRTHDAY_INTERVAL))
+        async def safe_birthday_loop():
+            try:
+                await birthday_check_loop(bot, interval_minutes=BIRTHDAY_INTERVAL)
+            except Exception as e:
+                logger.error(f"❌ Birthday check loop crashed: {e}", exc_info=True)
+                logger.info("🔁 Restarting birthday check loop in 5 seconds...")
+                await asyncio.sleep(5)
+
+        birthday_task = asyncio.create_task(safe_birthday_loop())
 
 # -------------------- Database Setup --------------------
 async def setup_database():

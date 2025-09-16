@@ -239,6 +239,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
                 await remove_birthday_roles(guild)
                 await check_and_send_birthdays(guild)
                 already_checked_guilds.add(guild.id)
+                logger.info(f"✅ Birthday check cycle finished for {guild.name} (hour={current_hour})")
             else:
                 logger.debug(f"{guild.name}: Not time yet (waiting for check_hour)")
 
