@@ -30,7 +30,7 @@ def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, test
     lines = []
     for idx, (user_id, birthday) in enumerate(page):
         if test_mode:
-            name = f"User{int(user_id[-3:]):03d}"  # fake display name for test
+            name = f"User{int(user_id[-3:]):03d}"  # fake display name for testing
         else:
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
@@ -46,9 +46,7 @@ class BirthdayPages(View):
         self.pages = pages
         self.guild = guild
         self.current = 0
-        self.message = None
 
-        # Disable buttons if only one page
         if len(pages) <= 1:
             for child in self.children:
                 child.disabled = True
@@ -57,20 +55,9 @@ class BirthdayPages(View):
         content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{self.pages[self.current]}"
         content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
         try:
-            await interaction.edit_original_response(content=content, view=self)
+            await interaction.response.edit_message(content=content, view=self)
         except Exception as e:
             logger.error(f"Failed to update birthday page in guild {self.guild.name}: {e}")
-
-    async def on_timeout(self):
-        for child in self.children:
-            child.disabled = True
-        if self.message:
-            try:
-                await self.message.edit(view=self)
-            except discord.NotFound:
-                logger.debug(f"BirthdayPages message already deleted in guild {self.guild.name}")
-            except Exception as e:
-                logger.error(f"Unexpected error on BirthdayPages timeout in guild {self.guild.name}: {e}")
 
     @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary)
     async def previous(self, button: Button, interaction: discord.Interaction):
@@ -189,14 +176,18 @@ class Birthdays(commands.Cog):
             check_hour = guild_config.get("check_hour", 9)
 
             if len(formatted_pages) == 1:
-                content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}\n\n-# 💡 Tip: Use /setbirthday to add your own special day!\n-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
-                await interaction.edit_original_response(content=content)
+                await interaction.followup.send(
+                    content=f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}\n\n-# 💡 Tip: Use /setbirthday to add your own special day!\n-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC",
+                    ephemeral=True
+                )
             else:
                 formatted_pages[0] += f"\n\n-# 💡 Tip: Use /setbirthday to add your own special day!\n-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
                 view = BirthdayPages(formatted_pages, interaction.guild)
-                content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}"
-                await interaction.edit_original_response(content=content, view=view)
-                view.message = await interaction.original_response()  # store for timeout edits
+                await interaction.followup.send(
+                    content=f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}",
+                    view=view,
+                    ephemeral=True
+                )
 
         except Exception as e:
             logger.error(f"Error viewing birthday list by {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
