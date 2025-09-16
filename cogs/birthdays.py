@@ -59,10 +59,11 @@ class BirthdayPages(View):
                 child.disabled = True
 
     async def update_message(self, interaction: discord.Interaction):
-        """Use this for button callbacks to update ephemeral messages correctly."""
+        """Update ephemeral message for pagination."""
         content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{self.pages[self.current]}"
         content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
         try:
+            # ✅ Correct usage: interaction.edit_original_response
             await interaction.edit_original_response(content=content, view=self)
         except Exception as e:
             logger.error(f"Failed to update birthday page in guild {self.guild.name}: {e}")
@@ -90,7 +91,6 @@ class BirthdayPages(View):
         if self.current < len(self.pages) - 1:
             self.current += 1
         await self.update_message(interaction)
-
 
 
 # ---------------- Birthday Commands ----------------
@@ -212,7 +212,7 @@ class Birthdays(commands.Cog):
                 view = BirthdayPages(formatted_pages, interaction.guild)
                 content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}"
                 msg = await interaction.followup.send(content=content, view=view, ephemeral=True)
-                view.message = msg  # Directly store the message
+                view.message = await msg.original_response()
 
         except Exception as e:
             logger.error(f"Error viewing birthday list by {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
