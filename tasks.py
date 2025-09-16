@@ -248,3 +248,14 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
             last_heartbeat = now
 
         await asyncio.sleep(interval_minutes * 60)
+
+# -------------------- Manual Trigger --------------------
+async def run_birthday_check_once(bot: discord.Client, ignore_wished: bool = False):
+    """Run a manual birthday check for all guilds."""
+    logger.info("🧪 Manual birthday check triggered (run_birthday_check_once)")
+    now = dt.datetime.now(dt.timezone.utc)
+    for guild in bot.guilds:
+        logger.info(f"🔍 Checking birthdays manually for guild: {guild.name} ({guild.id})")
+        await remove_birthday_roles(guild)
+        await check_and_send_birthdays(guild, today_override=now, ignore_wished=ignore_wished)
+    logger.info("✅ Manual birthday check finished.")
