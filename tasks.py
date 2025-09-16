@@ -55,6 +55,8 @@ async def clear_old_wishes(date_str: str):
 
 
 # -------------------- Birthday Check --------------------
+already_logged_missing_roles_remove = set()  # Fixed: declare set here
+
 async def check_and_send_birthdays(
     guild: discord.Guild,
     today_override: dt.datetime = None,
@@ -66,7 +68,7 @@ async def check_and_send_birthdays(
 
     config = await get_guild_config(guild_id)
     if not config:
-        logger.warning(f"⚠️ No config found for guild {guild_name} — skipping.")
+        logger.warning(f"❗ No config found for guild {guild_name} — skipping.")
         return
 
     # --- Resolve channel ---
@@ -85,14 +87,22 @@ async def check_and_send_birthdays(
     # --- Resolve role ---
     role_id = config.get("birthday_role_id")
     role = None
+    already_logged_missing_roles_add = set()  # Track logged missing roles for add
     if role_id:
-        role = guild.get_role(role_id)
-        if not role:
-            try:
-                role = await guild.fetch_role(role_id)
-                logger.info(f"✅ Fetched birthday role {role.name} for {guild_name}")
-            except Exception as e:
-                logger.warning(f"❌ Cannot find/access birthday role {role_id} in {guild_name}: {e}")
+        try:
+            role_id_int = int(role_id)
+            role = guild.get_role(role_id_int)
+            if not role:
+                try:
+                    role = await guild.fetch_role(role_id_int)
+                    logger.info(f"✅ Fetched birthday role {role.name} via API for {guild_name}")
+                except Exception as e:
+                    if guild.id not in already_logged_missing_roles_add:
+                        logger.warning(f"❗ Cannot find/access birthday role {role_id_int} in {guild_name}: {e}")
+                        already_logged_missing_roles_add.add(guild.id)
+                role = None
+        except (TypeError, ValueError):
+            logger.warning(f"❗ Invalid birthday role ID in {guild_name}, skipping role assignment.")
 
     now = today_override or dt.datetime.now(dt.timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
@@ -128,12 +138,12 @@ async def check_and_send_birthdays(
                 except Exception as e:
                     logger.error(f"❌ Failed to send birthday message for {member.display_name} in {guild_name}: {e}")
 
-                if role and role not in member.roles:
+                if role and member and role not in member.roles:
                     try:
                         await member.add_roles(role, reason="Birthday!")
                         logger.info(f"✅ Added birthday role to {member.display_name} in {guild_name}")
                     except Exception as e:
-                        logger.warning(f"⚠️ Could not add birthday role to {member.display_name}: {e}")
+                        logger.warning(f"❗ Could not add birthday role to {member.display_name}: {e}")
 
             if not ignore_wished:
                 await mark_as_wished(guild_id, user_id, date_str)
@@ -153,9 +163,18 @@ async def remove_birthday_roles(guild: discord.Guild):
         return
 
     role_id = config.get("birthday_role_id")
-    role = guild.get_role(role_id)
+    role = None
+    if role_id:
+        try:
+            role_id_int = int(role_id)
+            role = guild.get_role(role_id_int)
+            if not role and guild.id not in already_logged_missing_roles_remove:
+                logger.warning(f"❗ Birthday role {role_id_int} not found in {guild.name}. Skipping removal.")
+                already_logged_missing_roles_remove.add(guild.id)
+        except (TypeError, ValueError):
+            logger.warning(f"❗ Invalid birthday role ID in {guild.name}, skipping removal.")
+
     if not role:
-        logger.warning(f"⚠️ Birthday role {role_id} not found in {guild.name}. Skipping removal.")
         return
 
     for member in guild.members:
@@ -209,7 +228,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
         await asyncio.sleep(interval_minutes * 60)
 
 
-# -------------------- Run Once for Test (works with testdate.py) --------------------
+# -------------------- Run Once for Test --------------------
 async def run_birthday_check_once(
     bot: discord.Client,
     guild: discord.Guild = None,
