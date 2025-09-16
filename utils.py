@@ -71,7 +71,7 @@ class BirthdayPages(discord.ui.View):
         for user_id, birthday in self.pages[self.current]:
             member = self.guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
-            prefix = CONFETTI_ICON + " " if (dt.datetime.now(dt.timezone.utc).month, dt.datetime.now(dt.timezone.utc).day) == tuple(map(int, birthday.split("-"))) else "・"
+            prefix = "・" + (CONFETTI_ICON if is_birthday_on_date(birthday, today) else "")
             page_content.append(f"{prefix}{name} - {format_birthday_display(birthday)}")
 
         content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n"
@@ -79,6 +79,7 @@ class BirthdayPages(discord.ui.View):
         content += "\n\n"  # extra spacing before footer
         content += "-# 💡 Tip: Use /setbirthday to add your own special day!\n"
         content += f"-# ⏰ Bot checks birthdays daily at {self.check_hour}:00 UTC"
+        content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
 
         try:
             await interaction.response.edit_message(content=content, view=self)
