@@ -33,29 +33,34 @@ def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, curr
         name = member.display_name if member else f"<@{user_id}>"
         prefix = CONFETTI_ICON + " " if is_birthday_on_date(birthday, today) else "・"
         lines.append(f"{prefix}{name} - {format_birthday_display(birthday)}")
-
-    # Buttons go above tips, tips always visible
     content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n" + "\n".join(lines)
-    content += f"\nPage {current_page+1}/{total_pages}"
-    content += f"\n\n💡 Tip: Use /setbirthday to add your own special day!\n⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
+    content += f"\nPage {current_page + 1}/{total_pages}\n"
+    content += f"\n💡 Tip: Use /setbirthday to add your own special day!\n⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
     return content
 
 # ---------------- Pagination View ----------------
 class BirthdayPages(View):
-    def __init__(self, pages: list[list[tuple[str,str]]], guild: discord.Guild, check_hour: int):
+    def __init__(self, pages: list[list[tuple[str, str]]], guild: discord.Guild, check_hour: int):
         super().__init__(timeout=None)  # pinned messages stay forever
         self.pages = pages
         self.guild = guild
         self.check_hour = check_hour
         self.current = 0
 
+        # Create buttons dynamically
+        self.previous_button = Button(label="⬅️", style=discord.ButtonStyle.primary, disabled=True)
+        self.next_button = Button(label="➡️", style=discord.ButtonStyle.primary)
+
+        self.previous_button.callback = self.previous
+        self.next_button.callback = self.next
+
+        self.add_item(self.previous_button)
+        self.add_item(self.next_button)
+
     async def update_message(self, interaction: discord.Interaction):
-        # Disable buttons at edges
-        for child in self.children:
-            if child.label == "⬅️":
-                child.disabled = self.current == 0
-            elif child.label == "➡️":
-                child.disabled = self.current >= len(self.pages) - 1
+        # Update button states
+        self.previous_button.disabled = self.current == 0
+        self.next_button.disabled = self.current >= len(self.pages) - 1
 
         content = format_birthday_page(
             self.pages[self.current],
@@ -64,16 +69,17 @@ class BirthdayPages(View):
             len(self.pages),
             self.check_hour,
         )
-        await interaction.response.edit_message(content=content, view=self)
+        try:
+            await interaction.response.edit_message(content=content, view=self)
+        except discord.InteractionResponded:
+            await interaction.edit_original_response(content=content, view=self)
 
-    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=True)
-    async def previous(self, interaction: discord.Interaction, button: Button):
+    async def previous(self, interaction: discord.Interaction):
         if self.current > 0:
             self.current -= 1
         await self.update_message(interaction)
 
-    @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
-    async def next(self, interaction: discord.Interaction, button: Button):
+    async def next(self, interaction: discord.Interaction):
         if self.current < len(self.pages) - 1:
             self.current += 1
         await self.update_message(interaction)
@@ -82,36 +88,30 @@ class BirthdayPages(View):
 class Birthdays(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.daily_refresh.start()
+        self.refresh_pinned_messages.start()
 
-    # ---------------- Daily Refresh Task ----------------
-    @tasks.loop(minutes=60)
-    async def daily_refresh(self):
-        now = dt.datetime.now(dt.timezone.utc)
-        # Run only once per day at the configured hour
+    # ---------------- Daily Refresh ----------------
+    @tasks.loop(hours=24)
+    async def refresh_pinned_messages(self):
         for guild in self.bot.guilds:
-            guild_config = await get_guild_config(str(guild.id))
-            check_hour = guild_config.get("check_hour", 7) if guild_config else 7
-            if now.hour == check_hour and now.minute < 10:  # 10-minute window
-                try:
-                    birthdays = await get_birthdays(str(guild.id))
-                    today = dt.datetime.now(dt.timezone.utc)
-                    birthdays_today = [str(uid) for uid, bday in birthdays if is_birthday_on_date(bday, today)]
-                    await update_pinned_birthday_message(guild, highlight_today=birthdays_today)
-                except Exception as e:
-                    logger.error(f"Daily refresh error in guild {guild.name}: {e}")
+            try:
+                birthdays = await get_birthdays(str(guild.id))
+                today = dt.datetime.now(dt.timezone.utc)
+                birthdays_today = [str(uid) for uid, bday in birthdays if is_birthday_on_date(bday, today)]
+                await update_pinned_birthday_message(guild, highlight_today=birthdays_today)
+            except Exception as e:
+                logger.error(f"Failed daily pinned refresh in {guild.name}: {e}")
 
-    @daily_refresh.before_loop
-    async def before_daily_refresh(self):
+    @refresh_pinned_messages.before_loop
+    async def before_refresh(self):
         await self.bot.wait_until_ready()
 
-    # ---------------- Birthday Commands ----------------
+    # ---------------- Commands ----------------
     @app_commands.command(name="setbirthday", description="Set your birthday (day then month)")
     @app_commands.describe(day="Day of birthday", month="Month of birthday")
     async def setbirthday(self, interaction: discord.Interaction, day: int, month: int):
         if not await ensure_setup(interaction):
             return
-
         await interaction.response.defer(ephemeral=True)
         result = parse_day_month_input(day, month)
         if not result:
@@ -125,14 +125,9 @@ class Birthdays(commands.Cog):
             all_birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
-            if pinned_msg and not pinned_msg.pinned:
-                try:
-                    await pinned_msg.pin()
-                except discord.Forbidden:
-                    logger.warning(f"Cannot pin birthday message in {interaction.guild.name}")
+            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
         except Exception as e:
-            logger.error(f"Error setting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
+            logger.error(f"Error setting birthday: {e}")
             await interaction.followup.send("🚨 Failed to set birthday. Try again later.", ephemeral=True)
             return
 
@@ -143,31 +138,23 @@ class Birthdays(commands.Cog):
     async def deletebirthday(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
             return
-
         await interaction.response.defer(ephemeral=True)
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
             all_birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
-            if pinned_msg and not pinned_msg.pinned:
-                try:
-                    await pinned_msg.pin()
-                except discord.Forbidden:
-                    logger.warning(f"Cannot pin birthday message in {interaction.guild.name}")
+            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
         except Exception as e:
-            logger.error(f"Error deleting birthday for {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
+            logger.error(f"Error deleting birthday: {e}")
             await interaction.followup.send("🚨 Failed to delete birthday. Try again later.", ephemeral=True)
             return
-
         await interaction.followup.send("All done 🎈 Your birthday has been deleted.", ephemeral=True)
 
     @app_commands.command(name="viewbirthdays", description="View upcoming birthdays (first 20)")
     async def viewbirthdays(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
             return
-
         await interaction.response.defer(ephemeral=True)
         try:
             birthdays = await get_birthdays(str(interaction.guild.id))
@@ -176,7 +163,26 @@ class Birthdays(commands.Cog):
                 return
 
             today = dt.datetime.now(dt.timezone.utc)
-            first_page = birthdays[:ENTRIES_PER_PAGE]
+            birthdays_today = [str(uid) for uid, bday in birthdays if is_birthday_on_date(bday, today)]
+            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
+
+            # Sort upcoming birthdays
+            def upcoming_sort_key(b):
+                month, day = map(int, b[1].split("-"))
+                if month == 2 and day == 29:
+                    is_leap = today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0)
+                    if not is_leap:
+                        day = 28
+                current = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
+                if current < today and not is_birthday_on_date(b[1], today):
+                    current = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
+                return (current - today).total_seconds()
+
+            birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
+            first_page = birthdays_sorted[:ENTRIES_PER_PAGE]
+
+            guild_config = await get_guild_config(str(interaction.guild.id))
+            check_hour = guild_config.get("check_hour", 7)
 
             content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n"
             content += "\n".join([
@@ -184,10 +190,12 @@ class Birthdays(commands.Cog):
                 f"{interaction.guild.get_member(int(uid)).display_name if interaction.guild.get_member(int(uid)) else f'<@{uid}>'} - {format_birthday_display(bday)}"
                 for uid, bday in first_page
             ])
+            content += f"\n\n💡 Tip: Use /setbirthday to add your own special day!\n⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
+
             await interaction.followup.send(content=content, ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Error viewing birthday list by {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
+            logger.error(f"Error viewing birthdays: {e}")
             await interaction.followup.send("🚨 Failed to view birthday list. Try again later.", ephemeral=True)
 
 # ---------------- Setup Cog ----------------
