@@ -62,89 +62,62 @@ async def check_and_send_birthdays(
 ):
     guild_id = str(guild.id)
     logger.info(f"🔍 Checking birthdays for guild {guild.name} ({guild.id})...")
+
     config = await get_guild_config(guild_id)
     if not config:
         logger.warning(f"⚠️ No config found for guild {guild.name} ({guild.id}) — skipping.")
         return
 
- # --- Channel ---
+    # --- Resolve channel ---
     channel_id = config.get("channel_id")
-    logger.debug(f"Config for {guild.name}: channel_id={channel_id}, birthday_role_id={config.get('birthday_role_id')}")
-
     channel = guild.get_channel(channel_id)
     if not channel:
         try:
             channel = await guild.fetch_channel(channel_id)
             logger.info(f"✅ Fetched birthday channel {channel.name} ({channel.id}) via API for {guild.name}")
-        except discord.NotFound:
-            if guild.id not in logged_missing_channels:
-                visible_channels = [(c.name, c.id) for c in guild.channels][:10]
-                if len(guild.channels) > 10:
-                    visible_channels.append(("...", "..."))
-                logger.warning(
-                    f"❌ Birthday channel {channel_id} not found in guild {guild.name}. "
-                    f"Visible channels (first 10): {visible_channels}"
-                )
-                logged_missing_channels.add(guild.id)
-            return
-        except discord.Forbidden:
-            logger.error(f"⚠️ Cannot access birthday channel {channel_id} in {guild.name} (missing permissions).")
-            return
         except Exception as e:
-            logger.error(f"❌ Unexpected error fetching birthday channel {channel_id} in {guild.name}: {e}")
+            logger.warning(f"❌ Cannot find/access birthday channel {channel_id} in {guild.name}: {e}")
             return
 
     logger.info(f"✅ Using birthday channel: {channel.name} ({channel.id}) in {guild.name}")
 
-# --- Role ---
+    # --- Resolve role ---
     role_id = config.get("birthday_role_id")
     role = None
-
     if role_id:
         role = guild.get_role(role_id)
         if not role:
             try:
                 role = await guild.fetch_role(role_id)
                 logger.info(f"✅ Fetched birthday role {role.name} ({role.id}) via API for {guild.name}")
-            except discord.NotFound:
-                if guild.id not in logged_missing_roles:
-                    visible_roles = [(r.name, r.id) for r in guild.roles][:10]
-                    if len(guild.roles) > 10:
-                        visible_roles.append(("...", "..."))
-                    logger.warning(
-                        f"❌ Birthday role {role_id} not found in guild {guild.name}. "
-                        f"Visible roles (first 10): {visible_roles}"
-                    )
-                    logged_missing_roles.add(guild.id)
-            except discord.Forbidden:
-                logger.error(f"⚠️ Cannot access birthday role {role_id} in {guild.name} (missing permissions).")
             except Exception as e:
-                logger.error(f"❌ Unexpected error fetching birthday role {role_id} in {guild.name}: {e}")
-        else:
-            logger.debug(f"✅ Using birthday role: {role.name} ({role.id})")
+                logger.warning(f"❌ Cannot find/access birthday role {role_id} in {guild.name}: {e}")
 
     now = today_override or dt.datetime.now(dt.timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
-    logger.debug(f"Current UTC time: {now.isoformat()} (date_str={date_str})")
 
     birthdays = await get_birthdays(guild_id)
     logger.info(f"📋 Found {len(birthdays)} birthday entries in DB for {guild.name}")
     todays_birthdays = []
 
+    # --- Track users already sent messages this loop ---
+    sent_this_loop = set()
+
     for user_id, birthday in birthdays:
-        logger.debug(f"👤 Checking user {user_id} with birthday {birthday}")
+        if user_id in sent_this_loop:
+            continue
+
         if is_birthday_on_date(birthday, now):
-            logger.info(f"🎂 Today matches {user_id}'s birthday ({birthday})!")
             if not ignore_wished:
                 already_wished = await has_been_wished(guild_id, user_id, date_str)
                 if already_wished:
-                    logger.debug(f"⏩ Skipping {user_id} (already wished today).")
                     continue
 
             todays_birthdays.append(user_id)
+            sent_this_loop.add(user_id)
+
             member = guild.get_member(int(user_id))
             if member:
-                logger.debug(f"Preparing to send birthday message to {member.display_name} ({member.id})")
                 try:
                     await channel.send(
                         f"🎉 Happy Birthday, {member.mention}! 🎈\n"
@@ -156,30 +129,16 @@ async def check_and_send_birthdays(
 
                 if role and role not in member.roles:
                     try:
-                        logger.debug(f"Adding birthday role {role.name} to {member.display_name}")
                         await member.add_roles(role, reason="Birthday!")
                         logger.info(f"✅ Added birthday role to {member.display_name} in {guild.name}")
-                    except discord.Forbidden:
-                        logger.warning(f"⚠️ Cannot add birthday role to {member.display_name} (permissions issue).")
-                        await channel.send(
-                            f"⚠️ Cannot add birthday role to {member.mention}. Check bot permissions.",
-                            delete_after=10
-                        )
                     except Exception as e:
-                        logger.error(f"❌ Error adding birthday role to {member.display_name}: {e}")
-                        await channel.send(
-                            f"🚨 Error adding birthday role to {member.mention}. Try again later.",
-                            delete_after=10
-                        )
-
-            else:
-                logger.warning(f"⚠️ User {user_id} not found in {guild.name} (probably left the server).")
+                        logger.warning(f"⚠️ Could not add birthday role to {member.display_name}: {e}")
 
             if not ignore_wished:
                 await mark_as_wished(guild_id, user_id, date_str)
 
+    # --- Update pinned message ---
     try:
-        logger.debug(f"Updating pinned birthday message with highlights: {todays_birthdays}")
         await update_pinned_birthday_message(guild, highlight_today=todays_birthdays)
         logger.info(f"📌 Pinned message updated for {guild.name}")
     except Exception as e:
@@ -187,10 +146,8 @@ async def check_and_send_birthdays(
 
 # -------------------- Remove Birthday Roles --------------------
 async def remove_birthday_roles(guild: discord.Guild):
-    logger.debug(f"Checking for expired birthday roles in {guild.name}")
     config = await get_guild_config(str(guild.id))
     if not config or not config.get("birthday_role_id"):
-        logger.debug(f"No birthday_role_id set for {guild.name}, skipping removal.")
         return
 
     role_id = config.get("birthday_role_id")
@@ -205,9 +162,6 @@ async def remove_birthday_roles(guild: discord.Guild):
         if role in member.roles:
             try:
                 await member.remove_roles(role, reason="Birthday day ended")
-                logger.debug(f"Removed birthday role from {member.display_name}")
-            except discord.Forbidden:
-                logger.warning(f"⚠️ Cannot remove birthday role from {member.display_name}.")
             except Exception as e:
                 logger.error(f"❌ Error removing birthday role from {member.display_name}: {e}")
 
@@ -215,35 +169,20 @@ async def remove_birthday_roles(guild: discord.Guild):
 async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
     await ensure_wished_table()
     logger.info(f"🕒 Birthday check loop started (every {interval_minutes} minutes)")
+
     last_checked_date = None
     already_checked_guilds = set()
     last_heartbeat = None
     HEARTBEAT_INTERVAL = 5  # minutes
 
-    logger.info("🟢 Initial birthday check (catch-up) starting...")
     await asyncio.sleep(5)
-    now = dt.datetime.now(dt.timezone.utc)
-    for guild in bot.guilds:
-        config = await get_guild_config(str(guild.id))
-        if config and "check_hour" in config:
-            check_hour = int(config["check_hour"])
-            logger.debug(f"{guild.name}: check_hour={check_hour}, now.hour={now.hour}")
-            if now.hour >= check_hour:
-                logger.debug(f"Performing catch-up check for {guild.name}")
-                await remove_birthday_roles(guild)
-                await check_and_send_birthdays(guild, ignore_wished=True)
-                already_checked_guilds.add(guild.id)
-
-    
 
     while True:
-        logger.info(f"💡 Birthday loop tick at {dt.datetime.now(dt.timezone.utc)}")
         now = dt.datetime.now(dt.timezone.utc)
         today_str = now.strftime("%Y-%m-%d")
         current_hour = now.hour
 
         if last_checked_date != today_str:
-            logger.info(f"🔄 New day detected: {today_str} — clearing old wishes")
             await clear_old_wishes(today_str)
             last_checked_date = today_str
             already_checked_guilds.clear()
@@ -251,22 +190,16 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
         for guild in bot.guilds:
             config = await get_guild_config(str(guild.id))
             if not config or "check_hour" not in config:
-                logger.debug(f"{guild.name}: No check_hour set, skipping.")
                 continue
 
             check_hour = int(config["check_hour"])
-            logger.debug(f"{guild.name}: current_hour={current_hour}, check_hour={check_hour}")
             if guild.id in already_checked_guilds:
-                logger.debug(f"{guild.name}: already checked today, skipping.")
                 continue
+
             if current_hour >= check_hour:
-                logger.debug(f"Triggering birthday check for {guild.name}")
                 await remove_birthday_roles(guild)
                 await check_and_send_birthdays(guild)
                 already_checked_guilds.add(guild.id)
-                logger.info(f"✅ Birthday check cycle finished for {guild.name} (hour={current_hour})")
-            else:
-                logger.debug(f"{guild.name}: Not time yet (waiting for check_hour)")
 
         if last_heartbeat is None or (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL * 60:
             logger.info(f"💓 Birthday check loop alive at {now.strftime('%Y-%m-%d %H:%M:%S UTC')}")
@@ -274,17 +207,33 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
 
         await asyncio.sleep(interval_minutes * 60)
 
+# -------------------- Run Once for Test (works with testdate.py) --------------------
 # -------------------- Run Once for Test --------------------
 async def run_birthday_check_once(
     bot: discord.Client,
     guild: discord.Guild = None,
-    test_date: dt.datetime = None
+    test_date: dt.datetime = None,
+    reset_wished: bool = False  # new optional flag
 ):
     await ensure_wished_table()
+
+    # Clear today's wished entries if requested
+    if reset_wished and guild:
+        date_str = (test_date or dt.datetime.now(dt.timezone.utc)).strftime("%Y-%m-%d")
+        async with aiosqlite.connect(DB_FILE) as db:
+            await db.execute(
+                "DELETE FROM wished_today WHERE guild_id = ? AND date = ?",
+                (str(guild.id), date_str)
+            )
+            await db.commit()
+        logger.info(f"🗑️ Cleared wished users for this guild (test run)")
+
     if guild:
         await remove_birthday_roles(guild)
-        await check_and_send_birthdays(guild, today_override=test_date, ignore_wished=True)
+        # Use ignore_wished=False to prevent duplicates
+        await check_and_send_birthdays(guild, today_override=test_date, ignore_wished=False)
     else:
         for g in bot.guilds:
             await remove_birthday_roles(g)
-            await check_and_send_birthdays(g, today_override=test_date, ignore_wished=True)
+            await check_and_send_birthdays(g, today_override=test_date, ignore_wished=False)
+

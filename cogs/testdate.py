@@ -33,7 +33,6 @@ class TestDateCog(commands.Cog):
     )
     @app_commands.describe(date="Enter date in DD/MM/YYYY format")
     async def testdate(self, interaction: discord.Interaction, date: str):
-        # Top-level try/catch ensures user always gets a message
         try:
             if not await ensure_setup(interaction):
                 return
@@ -77,7 +76,13 @@ class TestDateCog(commands.Cog):
             # Run birthday check
             guild = interaction.guild
             try:
-                await run_birthday_check_once(self.bot, guild=guild, test_date=test_date)
+                # The key fix: reset_wished=True ensures one message per user per guild
+                await run_birthday_check_once(
+                    self.bot,
+                    guild=guild,
+                    test_date=test_date,
+                    reset_wished=True
+                )
                 await interaction.followup.send(
                     f"✅ Birthday check run for {test_date.strftime('%d/%m/%Y')} (UTC). Check the birthday channel.",
                     ephemeral=True
@@ -90,7 +95,7 @@ class TestDateCog(commands.Cog):
                 logger.error(f"Error running birthday check once for guild {guild.id} with date {date} by {interaction.user.id}: {e}", exc_info=True)
 
         except Exception as e:
-            # Catch any other unexpected exception to prevent "Unknown Integration"
+            # Catch any other unexpected exception
             try:
                 await interaction.followup.send(
                     "🚨 Unexpected error occurred. Please try again later.", ephemeral=True
