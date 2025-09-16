@@ -107,38 +107,26 @@ async def update_pinned_birthday_message(
             return (current_year_birthday - today).total_seconds()
 
         sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
+        lines = ["```yaml", "🎂 BIRTHDAY LIST 🎂", "------------------------"]
 
-        # Prepare aligned layout
-        entries = []
-        for user_id, birthday in sorted_birthdays[:MAX_PINNED_ENTRIES]:
+        for idx, (user_id, birthday) in enumerate(sorted_birthdays[:MAX_PINNED_ENTRIES]):
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
             if highlight_today and str(user_id) in map(str, highlight_today):
                 name = f"{CONFETTI_ICON} {name}"
-            entries.append((name, format_birthday_display(birthday)))
+            lines.append(f"・{name} ····· {format_birthday_display(birthday)}")
 
-        max_name_len = max(len(name) for name, _ in entries) if entries else 0
+        lines.append("```")  # End code block for main list
 
-        formatted_lines = []
-        for name, date in entries:
-            dots = "·" * (max_name_len - len(name) + 5)
-            formatted_lines.append(f"・{name} {dots} {date}")
-
-        content = (
-            "🎂 BIRTHDAY LIST 🎂\n"
-            "------------------------\n"
-            "```yaml\n" +
-            "\n".join(formatted_lines) +
-            "\n```"
-        )
-
+        # Footer (use small text)
         if len(sorted_birthdays) > MAX_PINNED_ENTRIES:
-            content += (
-                f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\n"
-                "Use /viewbirthdays to view the full list."
-            )
+            lines.append(f"-# ⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.")
+            lines.append("-# Use /viewbirthdays to view the full list.")
 
-        content += f"\n> *💡 Tip: Use /setbirthday to add your own special day!*\n> *Bot checks birthdays daily at {check_hour}:00 UTC*"
+        lines.append("-# 💡 Tip: Use /setbirthday to add your own special day!")
+        lines.append(f"-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC")
+
+        content = "\n".join(lines)
 
     pinned_msg = None
 
