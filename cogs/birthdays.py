@@ -28,12 +28,17 @@ def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = ENTRIES
     return [birthdays[i:i + per_page] for i in range(0, len(birthdays), per_page)]
 
 
-def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
+def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, test_mode: bool = False):
     today = dt.datetime.now(dt.timezone.utc)
     lines = []
-    for user_id, birthday in page:
-        member = guild.get_member(int(user_id))
-        name = member.display_name if member else f"<@{user_id}>"
+    for idx, (user_id, birthday) in enumerate(page):
+        if test_mode:
+            # Generate fake display names for testing
+            name = f"User{int(user_id[-3:]):03d}"  # last 3 digits of fake ID
+        else:
+            member = guild.get_member(int(user_id))
+            name = member.display_name if member else f"<@{user_id}>"
+
         prefix = CONFETTI_ICON + " " if is_birthday_on_date(birthday, today) else "・"
         lines.append(f"{prefix}{name} - {format_birthday_display(birthday)}")
     return "\n".join(lines)
@@ -91,7 +96,6 @@ class Birthdays(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # ---------------- /setbirthday ----------------
     @app_commands.command(name="setbirthday", description="Set your birthday (day then month)")
     @app_commands.describe(day="Day of birthday", month="Month of birthday")
     async def setbirthday(self, interaction: discord.Interaction, day: int, month: int):
@@ -128,7 +132,6 @@ class Birthdays(commands.Cog):
         human_readable = format_birthday_display(birthday_str)
         await interaction.followup.send(f"All done 💌 Your special day is marked as {human_readable}. Hugs are on the way!", ephemeral=True)
 
-    # ---------------- /deletebirthday ----------------
     @app_commands.command(name="deletebirthday", description="Delete your birthday")
     async def deletebirthday(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
@@ -156,7 +159,6 @@ class Birthdays(commands.Cog):
 
         await interaction.followup.send("All done 🎈 Your birthday has been deleted.", ephemeral=True)
 
-    # ---------------- /viewbirthdays ----------------
     @app_commands.command(name="viewbirthdays", description="View the birthday list with pagination")
     async def viewbirthdays(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
@@ -191,7 +193,11 @@ class Birthdays(commands.Cog):
                 return (current - today).total_seconds()
 
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
-            formatted_pages = [format_birthday_page(page, interaction.guild) for page in paginate_birthdays(birthdays_sorted)]
+
+            # --- TEMPORARY TEST MODE ---
+            TEST_MODE = True  # Change to False after testing
+            formatted_pages = [format_birthday_page(page, interaction.guild, test_mode=TEST_MODE)
+                               for page in paginate_birthdays(birthdays_sorted)]
 
             guild_config = await get_guild_config(str(interaction.guild.id))
             check_hour = guild_config.get("check_hour", 9)
