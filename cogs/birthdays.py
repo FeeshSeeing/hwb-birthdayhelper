@@ -128,7 +128,7 @@ class Birthdays(commands.Cog):
             ])
             content += "\n\n"  # extra spacing before footer
             content += "-# 💡 Tip: Use /setbirthday to add your own special day!\n"
-            content += f"-# ⏰ Bot checks birthdays daily at {self.check_hour}:00 UTC"
+            content += f"-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
 
             await interaction.followup.send(content=content, ephemeral=True)
 
