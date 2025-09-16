@@ -139,29 +139,25 @@ async def update_pinned_birthday_message(
                 pinned_msg_id = int(result[0])
                 pinned_msg = await channel.fetch_message(pinned_msg_id)
             except discord.NotFound:
-                logger.info(f"Stored pinned message not found in {guild.name}, creating new one.")
+                logger.info(f"Stored pinned message not found in {guild.name}, will create new one.")
                 pinned_msg = None
             except Exception as e:
                 logger.warning(f"Error fetching pinned message in {guild.name}: {e}")
                 pinned_msg = None
 
-        # --- Edit or Create Message ---
+        # --- Edit existing pinned message only ---
         if pinned_msg:
             try:
                 await pinned_msg.edit(content=content)
                 logger.info(f"Edited pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
-                # Pin refresh to force Discord highlight for today’s birthdays
-                if perms.manage_messages:
-                    await pinned_msg.unpin()
-                    await pinned_msg.pin()
             except Exception as e:
-                logger.warning(f"Failed to edit/pin message in {guild.name}: {e}")
+                logger.warning(f"Failed to edit pinned message in {guild.name}: {e}")
                 pinned_msg = None  # fallback to create new message
 
+        # --- Create and pin new message only if none exists ---
         if not pinned_msg:
             pinned_msg = await channel.send(content)
             logger.info(f"Created new birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
-
             if perms.manage_messages:
                 try:
                     await pinned_msg.pin()
@@ -171,6 +167,7 @@ async def update_pinned_birthday_message(
                 except Exception as e:
                     logger.warning(f"Unexpected error pinning message in {guild.name}: {e}")
 
+            # Store new pinned message ID
             await db.execute(
                 "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
                 (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
