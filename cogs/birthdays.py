@@ -25,7 +25,7 @@ async def ensure_setup(interaction: discord.Interaction) -> bool:
 def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = ENTRIES_PER_PAGE):
     return [birthdays[i:i + per_page] for i in range(0, len(birthdays), per_page)]
 
-def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, current_page: int, total_pages: int, check_hour: int):
+def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, current_page: int, total_pages: int):
     today = dt.datetime.now(dt.timezone.utc)
     lines = []
     for user_id, birthday in page:
@@ -33,9 +33,10 @@ def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, curr
         name = member.display_name if member else f"<@{user_id}>"
         prefix = CONFETTI_ICON + " " if is_birthday_on_date(birthday, today) else "・"
         lines.append(f"{prefix}{name} - {format_birthday_display(birthday)}")
+
     content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n" + "\n".join(lines)
-    content += f"\nPage {current_page + 1}/{total_pages}\n"
-    content += f"\n💡 Tip: Use /setbirthday to add your own special day!\n⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
+    content += f"\nPage {current_page + 1}/{total_pages}"
+    # NOTE: do NOT append tips here. Tips will be appended AFTER the View in the message send/edit
     return content
 
 # ---------------- Pagination View ----------------
@@ -66,13 +67,16 @@ class BirthdayPages(View):
             self.pages[self.current],
             self.guild,
             self.current,
-            len(self.pages),
-            self.check_hour,
+            len(self.pages)
         )
+
+        # Append tips **after the View** (buttons)
+        content_with_tips = content + f"\n\n-#💡 Tip: Use /setbirthday to add your own special day!\n-#⏰ Bot checks birthdays daily at {self.check_hour}:00 UTC"
+
         try:
-            await interaction.response.edit_message(content=content, view=self)
+            await interaction.response.edit_message(content=content_with_tips, view=self)
         except discord.InteractionResponded:
-            await interaction.edit_original_response(content=content, view=self)
+            await interaction.edit_original_response(content=content_with_tips, view=self)
 
     async def previous(self, interaction: discord.Interaction):
         if self.current > 0:
