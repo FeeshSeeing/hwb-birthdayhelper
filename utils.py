@@ -109,16 +109,30 @@ async def update_pinned_birthday_message(
         sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
         lines = ["```yaml", "🎂 BIRTHDAY LIST 🎂", "------------------------"]
 
+        # Determine max length for name column
+        name_lengths = []
+        for user_id, _ in sorted_birthdays[:MAX_PINNED_ENTRIES]:
+            member = guild.get_member(int(user_id))
+            name = member.display_name if member else f"<@{user_id}>"
+            if highlight_today and str(user_id) in map(str, highlight_today):
+                name = f"{CONFETTI_ICON} {name}"
+            name_lengths.append(len(name))
+        max_name_len = max(name_lengths) if name_lengths else 0
+
         for idx, (user_id, birthday) in enumerate(sorted_birthdays[:MAX_PINNED_ENTRIES]):
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
             if highlight_today and str(user_id) in map(str, highlight_today):
                 name = f"{CONFETTI_ICON} {name}"
-            lines.append(f"・{name} ····· {format_birthday_display(birthday)}")
 
-        lines.append("```")  # End code block for main list
+            # Calculate dots to align dates perfectly
+            dots_count = max(5, max_name_len - len(name) + 5)  # +5 gives some spacing
+            dots = "·" * dots_count
+            lines.append(f"・{name} {dots} {format_birthday_display(birthday)}")
 
-        # Footer (use small text)
+        lines.append("```")  # end code block
+
+        # Footer lines in small text (-#)
         if len(sorted_birthdays) > MAX_PINNED_ENTRIES:
             lines.append(f"-# ⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.")
             lines.append("-# Use /viewbirthdays to view the full list.")
@@ -127,6 +141,7 @@ async def update_pinned_birthday_message(
         lines.append(f"-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC")
 
         content = "\n".join(lines)
+
 
     pinned_msg = None
 
