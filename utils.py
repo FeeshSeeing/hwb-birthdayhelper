@@ -89,8 +89,9 @@ async def update_pinned_birthday_message(
     today = dt.datetime.now(dt.timezone.utc)
 
     if not birthdays:
-        content = "📂 No birthdays found yet."
+        content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n```yaml\nNo birthdays found!\n```"
     else:
+        # Sort upcoming birthdays
         def upcoming_sort_key(b):
             month, day = map(int, b[1].split("-"))
             if month == 2 and day == 29:
@@ -106,24 +107,38 @@ async def update_pinned_birthday_message(
             return (current_year_birthday - today).total_seconds()
 
         sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
-        lines = ["**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**"]
 
-        for idx, (user_id, birthday) in enumerate(sorted_birthdays[:MAX_PINNED_ENTRIES]):
+        # Prepare aligned layout
+        entries = []
+        for user_id, birthday in sorted_birthdays[:MAX_PINNED_ENTRIES]:
             member = guild.get_member(int(user_id))
             name = member.display_name if member else f"<@{user_id}>"
             if highlight_today and str(user_id) in map(str, highlight_today):
                 name = f"{CONFETTI_ICON} {name}"
-            lines.append(f"✦ {name}: {format_birthday_display(birthday)}")
+            entries.append((name, format_birthday_display(birthday)))
+
+        max_name_len = max(len(name) for name, _ in entries) if entries else 0
+
+        formatted_lines = []
+        for name, date in entries:
+            dots = "·" * (max_name_len - len(name) + 5)
+            formatted_lines.append(f"・{name} {dots} {date}")
+
+        content = (
+            "🎂 BIRTHDAY LIST 🎂\n"
+            "------------------------\n"
+            "```yaml\n" +
+            "\n".join(formatted_lines) +
+            "\n```"
+        )
 
         if len(sorted_birthdays) > MAX_PINNED_ENTRIES:
-            lines.append(
-                f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown."
-                "\nUse /viewbirthdays to view the full list."
+            content += (
+                f"\n⚠️ {len(sorted_birthdays) - MAX_PINNED_ENTRIES} more birthdays not shown.\n"
+                "Use /viewbirthdays to view the full list."
             )
 
-        lines.append("\n> *💡 Tip: Use /setbirthday to add your own special day!*")
-        lines.append(f"> *Bot checks birthdays daily at {check_hour}:00 UTC*")
-        content = "\n".join(lines)
+        content += f"\n> *💡 Tip: Use /setbirthday to add your own special day!*\n> *Bot checks birthdays daily at {check_hour}:00 UTC*"
 
     pinned_msg = None
 
@@ -145,7 +160,6 @@ async def update_pinned_birthday_message(
                 logger.warning(f"Error fetching pinned message in {guild.name}: {e}")
                 pinned_msg = None
 
-        # --- Edit existing pinned message only ---
         if pinned_msg:
             try:
                 await pinned_msg.edit(content=content)
@@ -154,7 +168,6 @@ async def update_pinned_birthday_message(
                 logger.warning(f"Failed to edit pinned message in {guild.name}: {e}")
                 pinned_msg = None  # fallback to create new message
 
-        # --- Create and pin new message only if none exists ---
         if not pinned_msg:
             pinned_msg = await channel.send(content)
             logger.info(f"Created new birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
@@ -167,7 +180,6 @@ async def update_pinned_birthday_message(
                 except Exception as e:
                     logger.warning(f"Unexpected error pinning message in {guild.name}: {e}")
 
-            # Store new pinned message ID
             await db.execute(
                 "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
                 (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
