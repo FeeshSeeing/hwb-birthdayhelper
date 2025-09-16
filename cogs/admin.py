@@ -41,14 +41,14 @@ class Admin(commands.Cog):
         guild_config = await get_guild_config(str(interaction.guild.id))
         if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
             await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
-            logger.warning(f"Unauthorized access: {interaction.user.id} attempted setuserbirthday in {interaction.guild.id}")
+            logger.warning(f"Unauthorized access: {interaction.user.display_name} attempted setuserbirthday in {interaction.guild.name}")
             return
 
         await interaction.response.defer(ephemeral=True)
         result = parse_day_month_input(day, month)
         if not result:
             await interaction.followup.send("❗ Invalid day/month!", ephemeral=True)
-            logger.warning(f"Invalid birthday input '{day} {month}' from {interaction.user.id} for user {user.id} in {interaction.guild.id}")
+            logger.warning(f"Invalid birthday input '{day} {month}' from {interaction.user.display_name} for user {user.display_name} in {interaction.guild.name}")
             return
 
         day, month = result
@@ -71,11 +71,11 @@ class Admin(commands.Cog):
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
         except Exception as e:
-            logger.error(f"Error setting birthday for user {user.id} by {interaction.user.id} in {interaction.guild.id}: {e}")
+            logger.error(f"Error setting birthday for user {user.display_name} by {interaction.user.display_name} in {interaction.guild.name}: {e}")
             await interaction.followup.send("🚨 Failed to set user's birthday. Try again later.", ephemeral=True)
             return
 
-        logger.info(f"👑 {interaction.user.id} set {user.id}'s birthday to {birthday_str} in {interaction.guild.id}")
+        logger.info(f"👑 {interaction.user.display_name} set {user.display_name}'s birthday to {birthday_str} in {interaction.guild.name}")
         await interaction.followup.send(f"💌 {user.display_name}'s birthday is set to {format_birthday_display(birthday_str)}.", ephemeral=True)
 
     @app_commands.command(name="deleteuserbirthday", description="Delete a user's birthday (Admin/Mod)")
@@ -87,7 +87,7 @@ class Admin(commands.Cog):
         guild_config = await get_guild_config(str(interaction.guild.id))
         if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
             await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
-            logger.warning(f"Unauthorized access: {interaction.user.id} attempted deleteuserbirthday in {interaction.guild.id}")
+            logger.warning(f"Unauthorized access: {interaction.user.display_name} attempted deleteuserbirthday in {interaction.guild.name}")
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -108,11 +108,11 @@ class Admin(commands.Cog):
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
         except Exception as e:
-            logger.error(f"Error deleting birthday for user {user.id} by {interaction.user.id} in {interaction.guild.id}: {e}")
+            logger.error(f"Error deleting birthday for user {user.display_name} by {interaction.user.display_name} in {interaction.guild.name}: {e}")
             await interaction.followup.send("🚨 Failed to delete user's birthday. Try again later.", ephemeral=True)
             return
 
-        logger.info(f"👑 {interaction.user.id} deleted {user.id}'s birthday in {interaction.guild.id}")
+        logger.info(f"👑 {interaction.user.display_name} deleted {user.display_name}'s birthday in {interaction.guild.name}")
         await interaction.followup.send(f"🗑️ {user.display_name}'s birthday has been deleted.", ephemeral=True)
 
     @app_commands.command(name="importbirthdays", description="Import birthdays from a message (Admin/Mod)")
@@ -123,7 +123,7 @@ class Admin(commands.Cog):
         guild_config = await get_guild_config(str(interaction.guild.id))
         if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
             await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
-            logger.warning(f"Unauthorized access: {interaction.user.id} attempted importbirthdays in {interaction.guild.id}")
+            logger.warning(f"Unauthorized access: {interaction.user.display_name} attempted importbirthdays in {interaction.guild.name}")
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -176,7 +176,7 @@ class Admin(commands.Cog):
                 except discord.Forbidden:
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}, missing permission.")
 
-            logger.info(f"📥 Imported {updated_count} birthdays in {interaction.guild.id} by {interaction.user.id}")
+            logger.info(f"📥 Imported {updated_count} birthdays in {interaction.guild.name} by {interaction.user.display_name}")
             await interaction.followup.send(f"✅ Imported {updated_count} birthdays and updated pinned message.", ephemeral=True)
 
         except discord.NotFound:
@@ -184,7 +184,7 @@ class Admin(commands.Cog):
         except discord.Forbidden:
             await interaction.followup.send("🚫 I don't have permission to read messages in that channel.", ephemeral=True)
         except Exception as e:
-            logger.error(f"Error importing birthdays for guild {interaction.guild.id} by {interaction.user.id}: {e}", exc_info=True)
+            logger.error(f"Error importing birthdays for guild {interaction.guild.name} by {interaction.user.display_name}: {e}", exc_info=True)
             await interaction.followup.send(f"🚨 Error importing birthdays: {e}", ephemeral=True)
 
     @app_commands.command(name="wipeguild", description="Completely wipe all birthdays and config for this server (Admin/Mod)")
@@ -204,10 +204,10 @@ class Admin(commands.Cog):
                 await db.execute("DELETE FROM guild_config WHERE guild_id = ?", (str(interaction.guild.id),))
                 await db.commit()
 
-            logger.info(f"🧹 {interaction.user.id} wiped guild {interaction.guild.id}")
+            logger.info(f"🧹 {interaction.user.display_name} wiped guild {interaction.guild.name}")
             await interaction.followup.send("✅ Guild data wiped. Please run `/setup` again.", ephemeral=True)
         except Exception as e:
-            logger.error(f"Error wiping guild {interaction.guild.id} by {interaction.user.id}: {e}", exc_info=True)
+            logger.error(f"Error wiping guild {interaction.guild.name} by {interaction.user.display_name}: {e}", exc_info=True)
             await interaction.followup.send("🚨 Failed to wipe guild data. Try again later.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
