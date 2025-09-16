@@ -210,7 +210,7 @@ class Birthdays(commands.Cog):
                 view = BirthdayPages(formatted_pages, interaction.guild)
                 content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}"
                 msg = await interaction.followup.send(content=content, view=view, ephemeral=True)
-                view.message = await msg.original_response()
+                view.message = msg  # Directly store the message
 
         except Exception as e:
             logger.error(f"Error viewing birthday list by {interaction.user} ({interaction.user.id}) in {interaction.guild.name}: {e}")
