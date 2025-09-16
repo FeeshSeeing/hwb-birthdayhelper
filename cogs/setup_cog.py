@@ -36,7 +36,10 @@ class SetupCog(commands.Cog):
             await interaction.response.send_message(
                 "❗ You are not allowed to use this.", ephemeral=True
             )
-            logger.warning(f"Unauthorized setup attempt by {interaction.user.id} in {interaction.guild.id}")
+            logger.warning(
+                f"Unauthorized setup attempt by {interaction.user.name}#{interaction.user.discriminator} "
+                f"in {interaction.guild.name}"
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -84,9 +87,9 @@ class SetupCog(commands.Cog):
             # Sync commands for this guild only
             try:
                 await self.bot.tree.sync(guild=interaction.guild)
-                logger.info(f"Commands synced for guild {interaction.guild.name} ({interaction.guild.id})")
+                logger.info(f"Commands synced for guild {interaction.guild.name}")
             except Exception as e:
-                logger.error(f"Failed to sync commands for {interaction.guild.name} ({interaction.guild.id}): {e}")
+                logger.error(f"Failed to sync commands for {interaction.guild.name}: {e}")
 
             # Send confirmation message
             confirmation_lines = [
@@ -101,11 +104,17 @@ class SetupCog(commands.Cog):
                     "in the server role hierarchy, otherwise it cannot assign it."
                 )
 
-            logger.info(f"Bot setup completed by {interaction.user.id} in {interaction.guild.id}")
+            logger.info(
+                f"Bot setup completed by {interaction.user.name}#{interaction.user.discriminator} "
+                f"in {interaction.guild.name}"
+            )
             await interaction.followup.send("\n".join(confirmation_lines), ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Error during setup for guild {interaction.guild.id} by {interaction.user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Error during setup for {interaction.guild.name} by {interaction.user.name}#{interaction.user.discriminator}: {e}",
+                exc_info=True
+            )
             await interaction.followup.send(
                 "🚨 An unexpected error occurred during setup. Please try again later or check logs.", ephemeral=True
             )
