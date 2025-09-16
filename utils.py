@@ -85,7 +85,7 @@ class BirthdayPages(discord.ui.View):
         content += "\n\n"  # extra spacing before footer
         content += "-# 💡 Tip: Use /setbirthday to add your own special day!\n"
         content += f"-# ⏰ Bot checks birthdays daily at {self.check_hour}:00 UTC"
-        if len(self.pages) > 1:
+        if len(self.pages) > 1 and len(self.pages[0]) == MAX_PINNED_ENTRIES:
             content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
 
         try:
