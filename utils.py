@@ -5,6 +5,7 @@ import datetime as dt
 from config import DB_FILE
 from database import get_birthdays, get_guild_config
 from logger import logger
+from discord.ui import View, Button
 
 MAX_PINNED_ENTRIES = 20  # Show first 20 in pinned message
 CONFETTI_ICON = "🎉"
@@ -44,14 +45,63 @@ def is_birthday_on_date(birthday_str: str, check_date: dt.datetime) -> bool:
                (check_date.month == 2 and check_date.day == 28 and not is_leap_year)
     return check_date.month == b_month and check_date.day == b_day
 
+# ---------------- Pagination View ----------------
+class BirthdayPages(discord.ui.View):
+    def __init__(self, pages: list[list[tuple[str, str]]], guild: discord.Guild, check_hour: int):
+        super().__init__(timeout=None)  # pinned messages stay forever
+        self.pages = pages
+        self.guild = guild
+        self.check_hour = check_hour
+        self.current = 0
 
+        self.previous_button = discord.ui.Button(label="⬅️", style=discord.ButtonStyle.primary, disabled=True)
+        self.next_button = discord.ui.Button(label="➡️", style=discord.ButtonStyle.primary)
+
+        self.previous_button.callback = self.previous
+        self.next_button.callback = self.next
+
+        self.add_item(self.previous_button)
+        self.add_item(self.next_button)
+
+    async def update_message(self, interaction: discord.Interaction):
+        self.previous_button.disabled = self.current == 0
+        self.next_button.disabled = self.current >= len(self.pages) - 1
+
+        page_content = []
+        today = dt.datetime.now(dt.timezone.utc)
+        for user_id, birthday in self.pages[self.current]:
+            member = self.guild.get_member(int(user_id))
+            name = member.display_name if member else f"<@{user_id}>"
+            prefix = CONFETTI_ICON + " " if is_birthday_on_date(birthday, today) else "・"
+            page_content.append(f"{prefix}{name} - {format_birthday_display(birthday)}")
+
+        content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n"
+        content += "\n".join(page_content)
+        content += f"\n\n-#💡 Tip: Use /setbirthday to add your own special day!\n-#⏰ Bot checks birthdays daily at {self.check_hour}:00 UTC"
+
+        try:
+            await interaction.response.edit_message(content=content, view=self)
+        except discord.InteractionResponded:
+            await interaction.edit_original_response(content=content, view=self)
+
+    async def previous(self, interaction: discord.Interaction):
+        if self.current > 0:
+            self.current -= 1
+        await self.update_message(interaction)
+
+    async def next(self, interaction: discord.Interaction):
+        if self.current < len(self.pages) - 1:
+            self.current += 1
+        await self.update_message(interaction)
+
+# ---------------- Update Pinned Birthday Message ----------------
 async def update_pinned_birthday_message(
     guild: discord.Guild,
     highlight_today: list[str] = None,
     manual: bool = False
 ) -> discord.Message | None:
-    """Update (or create if missing) the pinned birthday message for this guild."""
-
+    """Update (or create if missing) the pinned birthday message for this guild, with buttons and tips."""
+    
     guild_config = await get_guild_config(str(guild.id))
     if not guild_config:
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")
@@ -74,60 +124,46 @@ async def update_pinned_birthday_message(
         except discord.Forbidden:
             logger.error(f"Cannot access channel {channel_id} in guild {guild.name}. Missing permissions.")
             return None
-        except Exception as e:
-            logger.error(f"Unexpected error fetching channel {channel_id} in {guild.name}: {e}")
-            return None
 
     perms = channel.permissions_for(guild.me)
     if not perms.send_messages:
         logger.error(f"Bot cannot send messages in channel {channel.name} ({channel.id}) in guild {guild.name}.")
         return None
 
-    # --- Build message content ---
     check_hour = guild_config.get("check_hour", 9)
     birthdays = await get_birthdays(str(guild.id))
     today = dt.datetime.now(dt.timezone.utc)
 
     if not birthdays:
         content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n```yaml\nNo birthdays found!\n```"
-    else:
-        # Sort upcoming birthdays
-        def upcoming_sort_key(b):
-            month, day = map(int, b[1].split("-"))
-            if month == 2 and day == 29:
-                is_leap = today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0)
-                if not is_leap:
-                    day = 28
-            try:
-                current_year_birthday = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
-            except ValueError:
-                current_year_birthday = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
-            if current_year_birthday < today and not is_birthday_on_date(b[1], today):
-                return (dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc) - today).total_seconds()
-            return (current_year_birthday - today).total_seconds()
+        pinned_msg = await channel.send(content)
+        if perms.manage_messages:
+            await pinned_msg.pin()
+        return pinned_msg
 
-        sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
-        lines = ["🎂 BIRTHDAY LIST 🎂", "------------------------"]
+    # --- Sort birthdays ---
+    def upcoming_sort_key(b):
+        month, day = map(int, b[1].split("-"))
+        if month == 2 and day == 29:
+            is_leap = today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0)
+            if not is_leap:
+                day = 28
+        try:
+            current_year_birthday = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
+        except ValueError:
+            current_year_birthday = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
+        if current_year_birthday < today and not is_birthday_on_date(b[1], today):
+            return (dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc) - today).total_seconds()
+        return (current_year_birthday - today).total_seconds()
 
-        # --- Add only first MAX_PINNED_ENTRIES ---
-        for idx, (user_id, birthday) in enumerate(sorted_birthdays[:MAX_PINNED_ENTRIES]):
-            member = guild.get_member(int(user_id))
-            name = member.display_name if member else f"<@{user_id}>"
-            if highlight_today and str(user_id) in map(str, highlight_today):
-                name = f"{CONFETTI_ICON} {name}"
-            lines.append(f"・{name} - {format_birthday_display(birthday)}")
+    sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
 
-        lines.append("")  # space before footer/buttons
+    # --- Pagination ---
+    pages = [sorted_birthdays[i:i + MAX_PINNED_ENTRIES] for i in range(0, len(sorted_birthdays), MAX_PINNED_ENTRIES)]
+    view = BirthdayPages(pages, guild, check_hour)
 
-        # Optional tips/footer (below pagination)
-        lines.append("💡 Tip: Use /setbirthday to add your own special day!")
-        lines.append(f"⏰ Bot checks birthdays daily at {check_hour}:00 UTC")
-
-        content = "\n".join(lines)
-
+    # --- Fetch stored pinned message ---
     pinned_msg = None
-
-    # --- Fetch stored pinned message from DB ---
     async with aiosqlite.connect(DB_FILE) as db:
         async with db.execute(
             "SELECT value FROM config WHERE key=?", (f"pinned_birthday_msg_{guild.id}",)
@@ -139,7 +175,6 @@ async def update_pinned_birthday_message(
                 pinned_msg_id = int(result[0])
                 pinned_msg = await channel.fetch_message(pinned_msg_id)
             except discord.NotFound:
-                logger.info(f"Stored pinned message not found in {guild.name}, will create new one.")
                 pinned_msg = None
             except Exception as e:
                 logger.warning(f"Error fetching pinned message in {guild.name}: {e}")
@@ -147,29 +182,24 @@ async def update_pinned_birthday_message(
 
         if pinned_msg:
             try:
-                await pinned_msg.edit(content=content)
-                logger.info(f"Edited pinned birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
+                await pinned_msg.edit(view=view)
             except Exception as e:
                 logger.warning(f"Failed to edit pinned message in {guild.name}: {e}")
-                pinned_msg = None  # fallback to create new message
+                pinned_msg = None
 
         if not pinned_msg:
-            pinned_msg = await channel.send(content)
-            logger.info(f"Created new birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
+            pinned_msg = await channel.send(view=view)
             if perms.manage_messages:
                 try:
                     await pinned_msg.pin()
-                    logger.info(f"Pinned new birthday message (ID: {pinned_msg.id}) for guild {guild.name}.")
-                except discord.Forbidden:
-                    logger.warning(f"Cannot pin message in {guild.name}, missing permission.")
-                except Exception as e:
-                    logger.warning(f"Unexpected error pinning message in {guild.name}: {e}")
+                except Exception:
+                    pass
 
-            await db.execute(
-                "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
-                (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
-            )
-            await db.commit()
-            logger.debug(f"Stored pinned birthday message ID {pinned_msg.id} for guild {guild.name}")
+        # Store pinned message ID in DB
+        await db.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+            (f"pinned_birthday_msg_{guild.id}", str(pinned_msg.id))
+        )
+        await db.commit()
 
     return pinned_msg
