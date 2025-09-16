@@ -57,18 +57,28 @@ class Birthdays(commands.Cog):
         birthday_str = f"{month:02d}-{day:02d}"
 
         try:
-            await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
+            # Pass username for logging only
+            await set_birthday(
+                str(interaction.guild.id),
+                str(interaction.user.id),
+                birthday_str,
+                username=interaction.user.display_name
+            )
             all_birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
+            birthdays_today = [
+                str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)
+            ]
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
         except Exception as e:
-            logger.error(f"Error setting birthday: {e}")
+            logger.error(f"Error setting birthday for {interaction.user.display_name}: {e}")
             await interaction.followup.send("🚨 Failed to set birthday. Try again later.", ephemeral=True)
             return
 
         human_readable = format_birthday_display(birthday_str)
-        await interaction.followup.send(f"All done 💌 Your special day is marked as {human_readable}. Hugs are on the way!", ephemeral=True)
+        await interaction.followup.send(
+            f"All done 💌 Your special day is marked as {human_readable}. Hugs are on the way!", ephemeral=True
+        )
 
     @app_commands.command(name="deletebirthday", description="Delete your birthday")
     async def deletebirthday(self, interaction: discord.Interaction):
@@ -76,15 +86,22 @@ class Birthdays(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         try:
-            await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
+            await delete_birthday(
+                str(interaction.guild.id),
+                str(interaction.user.id),
+                username=interaction.user.display_name
+            )
             all_birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
+            birthdays_today = [
+                str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)
+            ]
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
         except Exception as e:
-            logger.error(f"Error deleting birthday: {e}")
+            logger.error(f"Error deleting birthday for {interaction.user.display_name}: {e}")
             await interaction.followup.send("🚨 Failed to delete birthday. Try again later.", ephemeral=True)
             return
+
         await interaction.followup.send("All done 🎈 Your birthday has been deleted.", ephemeral=True)
 
     @app_commands.command(name="viewbirthdays", description="View upcoming birthdays (first 20)")
