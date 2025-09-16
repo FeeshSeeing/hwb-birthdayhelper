@@ -55,12 +55,18 @@ class BirthdayPages(discord.ui.View):
         self.check_hour = check_hour
         self.current = 0
 
-        self.previous_button = Button(label="⬅️", style=discord.ButtonStyle.primary, disabled=True)
-        self.next_button = Button(label="➡️", style=discord.ButtonStyle.primary)
-        self.previous_button.callback = self.previous
-        self.next_button.callback = self.next
-        self.add_item(self.previous_button)
-        self.add_item(self.next_button)
+        # Only show pagination buttons if there’s more than 1 page
+        if len(self.pages) > 1:
+            self.previous_button = Button(label="⬅️", style=discord.ButtonStyle.primary, disabled=True)
+            self.next_button = Button(label="➡️", style=discord.ButtonStyle.primary)
+            self.previous_button.callback = self.previous
+            self.next_button.callback = self.next
+            self.add_item(self.previous_button)
+            self.add_item(self.next_button)
+        else:
+            # No pagination needed
+            self.previous_button = None
+            self.next_button = None
 
     async def update_message(self, interaction: discord.Interaction):
         self.previous_button.disabled = self.current == 0
