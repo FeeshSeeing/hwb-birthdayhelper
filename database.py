@@ -1,5 +1,6 @@
 # database.py
 import aiosqlite
+import discord
 from config import DB_FILE
 from logger import logger
 
@@ -35,27 +36,36 @@ async def init_db():
 
 
 # -------------------- Birthday Operations --------------------
-async def set_birthday(guild_id: str, user_id: str, birthday: str):
+async def set_birthday(guild: discord.Guild, user_id: str, birthday: str):
+    """Add or update a user's birthday and log with username."""
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
             "INSERT OR REPLACE INTO birthdays (guild_id, user_id, birthday) VALUES (?, ?, ?)",
-            (guild_id, user_id, birthday)
+            (str(guild.id), user_id, birthday)
         )
         await db.commit()
-    logger.info(f"🎂 Birthday saved for user {user_id} in guild {guild_id}: {birthday}")
+
+    member = guild.get_member(int(user_id))
+    username = member.display_name if member else f"<@{user_id}>"
+    logger.info(f"🎂 Birthday saved for user {username} ({user_id}) in guild {guild.id}: {birthday}")
 
 
-async def delete_birthday(guild_id: str, user_id: str):
+async def delete_birthday(guild: discord.Guild, user_id: str):
+    """Delete a user's birthday and log with username."""
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
             "DELETE FROM birthdays WHERE guild_id = ? AND user_id = ?",
-            (guild_id, user_id)
+            (str(guild.id), user_id)
         )
         await db.commit()
-    logger.info(f"🗑️ Birthday deleted for user {user_id} in guild {guild_id}")
+
+    member = guild.get_member(int(user_id))
+    username = member.display_name if member else f"<@{user_id}>"
+    logger.info(f"🗑️ Birthday deleted for user {username} ({user_id}) in guild {guild.id}")
 
 
 async def get_birthdays(guild_id: str) -> list[tuple[str, str]]:
+    """Return list of (user_id, birthday) tuples for a guild."""
     try:
         async with aiosqlite.connect(DB_FILE) as db:
             cursor = await db.execute(
@@ -127,5 +137,3 @@ async def get_config_value(key: str) -> str | None:
         row = await cursor.fetchone()
         await cursor.close()
         return row[0] if row else None
-    
-    
