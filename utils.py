@@ -6,7 +6,7 @@ from config import DB_FILE
 from database import get_birthdays, get_guild_config
 from logger import logger
 
-MAX_PINNED_ENTRIES = 20  # Show first 20 in pinned message
+MAX_PINNED_ENTRIES = 3  # Show first 20 in pinned message
 CONFETTI_ICON = "🎉"
 
 
