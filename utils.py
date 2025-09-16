@@ -85,7 +85,8 @@ class BirthdayPages(discord.ui.View):
         content += "\n\n"  # extra spacing before footer
         content += "-# 💡 Tip: Use /setbirthday to add your own special day!\n"
         content += f"-# ⏰ Bot checks birthdays daily at {self.check_hour}:00 UTC"
-        content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
+        if len(self.pages) > 1:
+            content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
 
         try:
             await interaction.response.edit_message(content=content, view=self)
