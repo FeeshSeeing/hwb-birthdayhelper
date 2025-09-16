@@ -25,47 +25,57 @@ async def ensure_setup(interaction: discord.Interaction) -> bool:
 def paginate_birthdays(birthdays: list[tuple[str, str]], per_page: int = ENTRIES_PER_PAGE):
     return [birthdays[i:i + per_page] for i in range(0, len(birthdays), per_page)]
 
-def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, test_mode: bool = False):
+def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild, current_page: int, total_pages: int, check_hour: int):
     today = dt.datetime.now(dt.timezone.utc)
     lines = []
-    for idx, (user_id, birthday) in enumerate(page):
-        if test_mode:
-            name = f"User{int(user_id[-3:]):03d}"  # fake display name for test
-        else:
-            member = guild.get_member(int(user_id))
-            name = member.display_name if member else f"<@{user_id}>"
-
+    for user_id, birthday in page:
+        member = guild.get_member(int(user_id))
+        name = member.display_name if member else f"<@{user_id}>"
         prefix = CONFETTI_ICON + " " if is_birthday_on_date(birthday, today) else "・"
         lines.append(f"{prefix}{name} - {format_birthday_display(birthday)}")
-    return "\n".join(lines)
+
+    # Buttons go above tips, tips always visible
+    content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n" + "\n".join(lines)
+    content += f"\nPage {current_page+1}/{total_pages}"
+    content += f"\n\n💡 Tip: Use /setbirthday to add your own special day!\n⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
+    return content
 
 # ---------------- Pagination View ----------------
 class BirthdayPages(View):
-    def __init__(self, pages: list[str], guild: discord.Guild):
-        super().__init__(timeout=180)
+    def __init__(self, pages: list[str], guild: discord.Guild, check_hour: int):
+        super().__init__(timeout=None)  # pinned messages stay forever
         self.pages = pages
         self.guild = guild
+        self.check_hour = check_hour
         self.current = 0
-        self.message = None
 
     async def update_message(self, interaction: discord.Interaction):
-        content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{self.pages[self.current]}"
-        content += f"\nPage {self.current + 1}/{len(self.pages)}\n\n💡 Tip: Use /setbirthday to add your own special day!\n⏰ Bot checks birthdays daily at 7:00 UTC"
+        # Disable buttons at edges
         for child in self.children:
             if child.label == "⬅️":
                 child.disabled = self.current == 0
             elif child.label == "➡️":
                 child.disabled = self.current >= len(self.pages) - 1
+
+        content = format_birthday_page(
+            self.pages[self.current],
+            self.guild,
+            self.current,
+            len(self.pages),
+            self.check_hour,
+        )
         await interaction.response.edit_message(content=content, view=self)
 
     @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=True)
     async def previous(self, interaction: discord.Interaction, button: Button):
-        self.current -= 1
+        if self.current > 0:
+            self.current -= 1
         await self.update_message(interaction)
 
     @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
     async def next(self, interaction: discord.Interaction, button: Button):
-        self.current += 1
+        if self.current < len(self.pages) - 1:
+            self.current += 1
         await self.update_message(interaction)
 
 # ---------------- Birthday Commands ----------------
@@ -130,7 +140,7 @@ class Birthdays(commands.Cog):
 
         await interaction.followup.send("All done 🎈 Your birthday has been deleted.", ephemeral=True)
 
-    @app_commands.command(name="viewbirthdays", description="View the birthday list with pagination")
+    @app_commands.command(name="viewbirthdays", description="View upcoming birthdays (first 20)")
     async def viewbirthdays(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
             return
@@ -154,17 +164,21 @@ class Birthdays(commands.Cog):
                         day = 28
                 current = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
                 if current < today and not is_birthday_on_date(b[1], today):
-                    return (dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc) - today).total_seconds()
+                    current = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
                 return (current - today).total_seconds()
 
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
+            first_page = birthdays_sorted[:ENTRIES_PER_PAGE]
 
-            # --- Show only first 20, no buttons ---
-            formatted_page = format_birthday_page(birthdays_sorted[:20], interaction.guild)
             guild_config = await get_guild_config(str(interaction.guild.id))
             check_hour = guild_config.get("check_hour", 7)
 
-            content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_page}\n\n💡 Tip: Use /setbirthday to add your own special day!\n⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
+            content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n"
+            content += "\n".join([
+                f"{CONFETTI_ICON if is_birthday_on_date(bday, today) else '・'} "
+                f"{interaction.guild.get_member(int(uid)).display_name if interaction.guild.get_member(int(uid)) else f'<@{uid}>'} - {format_birthday_display(bday)}"
+                for uid, bday in first_page
+            ])
             await interaction.followup.send(content=content, ephemeral=True)
 
         except Exception as e:
