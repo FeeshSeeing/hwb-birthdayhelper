@@ -213,6 +213,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
     logger.info(f"🕒 Birthday check loop started (every {interval_minutes} minutes)")
 
     while True:
+        logger.info(f"💡 Birthday loop tick at {dt.datetime.now(dt.timezone.utc)}")
         now = dt.datetime.now(dt.timezone.utc)
         today_str = now.strftime("%Y-%m-%d")
         current_hour = now.hour
