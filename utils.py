@@ -127,8 +127,6 @@ async def update_pinned_birthday_message(
 
         content = "\n".join(lines)
 
-
-
     pinned_msg = None
 
     # --- Fetch stored pinned message from DB ---

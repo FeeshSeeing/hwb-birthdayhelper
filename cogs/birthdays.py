@@ -34,8 +34,8 @@ def format_birthday_page(page: list[tuple[str, str]], guild: discord.Guild):
     for user_id, birthday in page:
         member = guild.get_member(int(user_id))
         name = member.display_name if member else f"<@{user_id}>"
-        prefix = CONFETTI_ICON + " " if is_birthday_on_date(birthday, today) else "✦ "
-        lines.append(f"{prefix}{name}: {format_birthday_display(birthday)}")
+        prefix = CONFETTI_ICON + " " if is_birthday_on_date(birthday, today) else "・"
+        lines.append(f"{prefix}{name} - {format_birthday_display(birthday)}")
     return "\n".join(lines)
 
 
@@ -52,7 +52,7 @@ class BirthdayPages(View):
         self.message = None
 
     async def update_message(self, interaction: discord.Interaction):
-        content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{self.pages[self.current]}"
+        content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{self.pages[self.current]}"
         content += f"\n\nPage {self.current + 1}/{len(self.pages)}"
         await interaction.response.edit_message(content=content, view=self)
 
@@ -109,12 +109,10 @@ class Birthdays(commands.Cog):
         try:
             await set_birthday(str(interaction.guild.id), str(interaction.user.id), birthday_str)
 
-            # Highlight today's birthdays
             all_birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
 
-            # Update pinned message
             pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
             if pinned_msg and not pinned_msg.pinned:
                 try:
@@ -140,12 +138,10 @@ class Birthdays(commands.Cog):
         try:
             await delete_birthday(str(interaction.guild.id), str(interaction.user.id))
 
-            # Highlight today's birthdays
             all_birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
 
-            # Update pinned message
             pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
             if pinned_msg and not pinned_msg.pinned:
                 try:
@@ -176,7 +172,6 @@ class Birthdays(commands.Cog):
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [str(uid) for uid, bday in birthdays if is_birthday_on_date(bday, today)]
 
-            # Update pinned message manually
             pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
             if pinned_msg and not pinned_msg.pinned:
                 try:
@@ -184,7 +179,6 @@ class Birthdays(commands.Cog):
                 except discord.Forbidden:
                     logger.warning(f"Cannot pin birthday message in {interaction.guild.name}")
 
-            # Sort birthdays for pagination
             def upcoming_sort_key(b):
                 month, day = map(int, b[1].split("-"))
                 if month == 2 and day == 29:
@@ -201,15 +195,14 @@ class Birthdays(commands.Cog):
 
             guild_config = await get_guild_config(str(interaction.guild.id))
             check_hour = guild_config.get("check_hour", 9)
-            check_hour_info = f"_Bot checks birthdays daily at {check_hour}:00 UTC_"
 
             if len(formatted_pages) == 1:
-                content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{formatted_pages[0]}\n\n_- Tip: Use /setbirthday to add your own special day._\n{check_hour_info}"
+                content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}\n\n-# 💡 Tip: Use /setbirthday to add your own special day!\n-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
                 await interaction.followup.send(content=content, ephemeral=True)
             else:
-                formatted_pages[0] += f"\n\n_- Tip: Use /setbirthday to add your own special day._\n{check_hour_info}"
+                formatted_pages[0] += f"\n\n-# 💡 Tip: Use /setbirthday to add your own special day!\n-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
                 view = BirthdayPages(formatted_pages, interaction.guild)
-                content = f"**⋆ ˚｡⋆ BIRTHDAY LIST ⋆ ˚｡⋆🎈🎂**\n{formatted_pages[0]}"
+                content = f"🎂 BIRTHDAY LIST 🎂\n------------------------\n{formatted_pages[0]}"
                 msg = await interaction.followup.send(content=content, view=view, ephemeral=True)
                 view.message = await msg.original_response()
 
