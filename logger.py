@@ -10,3 +10,5 @@ if not logger.hasHandlers():
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+logger.propagate = False  # stops double logging
