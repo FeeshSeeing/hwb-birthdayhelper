@@ -33,6 +33,7 @@ class Admin(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="setuserbirthday", description="Set a birthday for another user (Admin/Mod)")
+    @app_commands.default_permissions(manage_guild=True)
     @app_commands.describe(user="User", day="Day", month="Month")
     async def setuserbirthday(self, interaction: discord.Interaction, user: discord.Member, day: int, month: int):
         if not await ensure_setup(interaction):
@@ -79,6 +80,7 @@ class Admin(commands.Cog):
         await interaction.followup.send(f"💌 {user.display_name}'s birthday is set to {format_birthday_display(birthday_str)}.", ephemeral=True)
 
     @app_commands.command(name="deleteuserbirthday", description="Delete a user's birthday (Admin/Mod)")
+    @app_commands.default_permissions(manage_guild=True)
     @app_commands.describe(user="User")
     async def deleteuserbirthday(self, interaction: discord.Interaction, user: discord.Member):
         if not await ensure_setup(interaction):
@@ -94,7 +96,6 @@ class Admin(commands.Cog):
         try:
             await delete_birthday(str(interaction.guild.id), str(user.id))
 
-            # Update pinned message
             all_birthdays_in_guild = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [uid for uid, bday in all_birthdays_in_guild if is_birthday_on_date(bday, today)]
@@ -116,6 +117,7 @@ class Admin(commands.Cog):
         await interaction.followup.send(f"🗑️ {user.display_name}'s birthday has been deleted.", ephemeral=True)
 
     @app_commands.command(name="importbirthdays", description="Import birthdays from a message (Admin/Mod)")
+    @app_commands.default_permissions(manage_guild=True)
     async def importbirthdays(self, interaction: discord.Interaction, channel: discord.TextChannel, message_id: str):
         if not await ensure_setup(interaction):
             return
@@ -165,7 +167,6 @@ class Admin(commands.Cog):
                     updated_count += 1
                 await db.commit()
 
-            # Update pinned message after import
             all_birthdays_in_guild = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [uid for uid, bday in all_birthdays_in_guild if is_birthday_on_date(bday, today)]
@@ -188,6 +189,7 @@ class Admin(commands.Cog):
             await interaction.followup.send(f"🚨 Error importing birthdays: {e}", ephemeral=True)
 
     @app_commands.command(name="wipeguild", description="Completely wipe all birthdays and config for this server (Admin/Mod)")
+    @app_commands.default_permissions(manage_guild=True)
     async def wipeguild(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
             return

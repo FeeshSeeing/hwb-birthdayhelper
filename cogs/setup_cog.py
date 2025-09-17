@@ -16,12 +16,8 @@ class SetupCog(commands.Cog):
         name="setup",
         description="Setup the bot for your server"
     )
-    @app_commands.describe(
-        channel="Channel to post birthdays",
-        birthday_role="Role to assign on birthdays (optional)",
-        mod_role="Moderator role (optional, only admins otherwise)",
-        check_hour="Hour to send birthday messages (0-23, UTC)(Default 9:00)"
-    )
+    @app_commands.default_permissions(manage_guild=True)  # ✅ Hide from non-admin users
+    @app_commands.checks.has_permissions(administrator=True)  # ✅ Only admins can execute
     async def setup(
         self,
         interaction: discord.Interaction,
@@ -32,6 +28,7 @@ class SetupCog(commands.Cog):
     ):
         check_hour = max(0, min(check_hour, 23))
 
+        # Double check (extra safety in case of Discord desync)
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
                 "❗ You are not allowed to use this.", ephemeral=True
@@ -67,7 +64,7 @@ class SetupCog(commands.Cog):
                 )
                 await db.commit()
 
-            # Fetch existing birthdays to properly highlight if any happen to be today on setup
+            # Highlight birthdays happening today
             birthdays = await get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [
@@ -75,7 +72,6 @@ class SetupCog(commands.Cog):
                 if is_birthday_on_date(bday, today)
             ]
 
-            # Update pinned birthday message and ensure it is pinned
             pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
             if pinned_msg and not pinned_msg.pinned:
                 try:
@@ -91,7 +87,6 @@ class SetupCog(commands.Cog):
             except Exception as e:
                 logger.error(f"Failed to sync commands for {interaction.guild.name}: {e}")
 
-            # Send confirmation message
             confirmation_lines = [
                 "✅ HWB-BirthdayHelper is now configured!",
                 f"Birthdays will post in {channel.mention} at {check_hour}:00 UTC.",
@@ -118,7 +113,6 @@ class SetupCog(commands.Cog):
             await interaction.followup.send(
                 "🚨 An unexpected error occurred during setup. Please try again later or check logs.", ephemeral=True
             )
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(SetupCog(bot))

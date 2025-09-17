@@ -31,6 +31,7 @@ class TestDateCog(commands.Cog):
         name="testdate",
         description="Run a birthday check for a specific date (Admin/Mod)"
     )
+    @app_commands.default_permissions(manage_guild=True)  # ✅ Hide from normal users
     @app_commands.describe(date="Enter date in DD/MM/YYYY format")
     async def testdate(self, interaction: discord.Interaction, date: str):
         try:
@@ -76,12 +77,11 @@ class TestDateCog(commands.Cog):
             # Run birthday check
             guild = interaction.guild
             try:
-                # The key fix: reset_wished=True ensures one message per user per guild
                 await run_birthday_check_once(
                     self.bot,
                     guild=guild,
                     test_date=test_date,
-                    reset_wished=True
+                    reset_wished=True  # ✅ ensures one message per user per guild
                 )
                 await interaction.followup.send(
                     f"✅ Birthday check run for {test_date.strftime('%d/%m/%Y')} (UTC). Check the birthday channel.",
@@ -95,7 +95,6 @@ class TestDateCog(commands.Cog):
                 logger.error(f"Error running birthday check once for guild {guild.id} with date {date} by {interaction.user.id}: {e}", exc_info=True)
 
         except Exception as e:
-            # Catch any other unexpected exception
             try:
                 await interaction.followup.send(
                     "🚨 Unexpected error occurred. Please try again later.", ephemeral=True

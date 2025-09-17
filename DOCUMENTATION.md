@@ -78,3 +78,27 @@
 - Use the bot responsibly and within Discord TOS.  
 - If the bot cannot assign/remove roles or pin messages, check role hierarchy and permissions.  
 - `/testdate` resets the daily tracker so all users can be wished again.  
+
+
+
+
+
+# 📋 HWB-BirthdayHelper Command Permissions
+
+| Command            | Visible To          | Who Can Use It?             | Notes |
+|--------------------|---------------------|-----------------------------|------|
+| `/setup`           | Admins only         | Admins only                 | Used once per server to configure bot |
+| `/setuserbirthday` | Admins + Mods       | Admins + Mods               | Set birthdays for other users |
+| `/deleteuserbirthday` | Admins + Mods    | Admins + Mods               | Delete birthdays for other users |
+| `/importbirthdays` | Admins + Mods       | Admins + Mods               | Bulk import birthdays from a message |
+| `/wipeguild`       | Admins + Mods       | Admins + Mods               | **Dangerous**: wipes all birthdays & config |
+| `/testdate`        | Admins + Mods       | Admins + Mods               | Run a birthday check for a custom date (for testing) |
+| `/showwished`      | Admins + Mods       | Admins + Mods               | Shows which users have been wished today |
+| `/clearwished`     | Admins + Mods       | Admins + Mods               | Clears the "wished today" list (for testing) |
+| `/setbirthday`     | Everyone            | Everyone                    | Users set their own birthdays |
+| `/mybirthday`      | Everyone            | Everyone                    | Users can view their saved birthday |
+| `/listbirthdays`   | Everyone            | Everyone                    | Show a list of all birthdays in the server |
+
+> ✅ **Admins** = Discord users with Administrator permission  
+> ✅ **Mods** = Users with the moderator role you set during `/setup`  
+> 👀 **Visibility** = These commands won't even show up in the slash-command list for users who don't have permission
