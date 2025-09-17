@@ -77,7 +77,8 @@ async def load_all_cogs():
         "cogs.admin",
         "cogs.setup_cog",
         "cogs.testdate",
-        "cogs.debug_cog"
+        "cogs.debug_cog",
+        "cogs.member_cleanup"
     ]
     for cog in cog_list:
         try:
