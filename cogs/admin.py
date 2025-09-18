@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import View, Button
 from utils import parse_day_month_input, format_birthday_display, update_pinned_birthday_message, is_birthday_on_date
 from logger import logger
 import datetime as dt
@@ -183,32 +184,73 @@ class Admin(commands.Cog):
             logger.error(f"Error importing birthdays: {e}", exc_info=True)
             await interaction.followup.send("🚨 Error importing birthdays. Try again later.", ephemeral=True)
 
-    # ---------------- Admin / Mod Wipe Guild ----------------
-    @app_commands.command(name="wipeguild", description="Completely remove all birthdays and config for this server (Admin/Mod)")
-    @app_commands.default_permissions(manage_guild=True)
-    async def wipeguild(self, interaction: discord.Interaction):
-        if not await ensure_setup(interaction, self.bot.db):
-            return
+# ---------------- Admin / Mod Wipe Guild with confirmation ----------------
+@app_commands.command(name="wipeguild",description="Completely remove all birthdays and config for this server (Admin/Mod)")
+@app_commands.default_permissions(manage_guild=True)
+async def wipeguild(self, interaction: discord.Interaction):
+    if not await ensure_setup(interaction, self.bot.db):
+        return
 
-        guild_config = await self.bot.db.get_guild_config(interaction.guild.id)
-        if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id") if guild_config else None):
-            await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
-            return
+    guild_config = await self.bot.db.get_guild_config(interaction.guild.id)
+    if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id") if guild_config else None):
+        await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
+        return
 
-        await interaction.response.defer(ephemeral=True)
-        try:
-            await self.bot.db.db.execute("DELETE FROM birthdays WHERE guild_id = ?", (interaction.guild.id,))
-            await self.bot.db.db.execute("DELETE FROM config WHERE guild_id = ?", (interaction.guild.id,))
-            await self.bot.db.db.execute("DELETE FROM wished_today WHERE guild_id = ?", (interaction.guild.id,))
-            await self.bot.db.db.commit()
+    class WipeConfirmView(View):
+        def __init__(self, bot, guild_id, author_id):
+            super().__init__(timeout=60)
+            self.bot = bot
+            self.guild_id = guild_id
+            self.author_id = author_id
 
-            logger.info(f"🧹 {interaction.user.display_name} wiped all data for guild {interaction.guild.name}")
-            await interaction.followup.send("🧹 All guild data has been wiped. You can now run `/setup` again.", ephemeral=True)
+        @discord.ui.button(label="✅ Confirm Wipe", style=discord.ButtonStyle.danger)
+        async def confirm(self, interaction_button: discord.Interaction, button: Button):
+            if interaction_button.user.id != self.author_id:
+                await interaction_button.response.send_message(
+                    "❌ You cannot confirm this wipe.", ephemeral=True
+                )
+                return
 
-        except Exception as e:
-            logger.error(f"Error wiping guild data: {e}", exc_info=True)
-            await interaction.followup.send("🚨 Failed to wipe guild data.", ephemeral=True)
+            await interaction_button.response.edit_message(
+                content="🧹 Wipe confirmed. Deleting guild data...", view=None
+            )
+            try:
+                await self.bot.db.db.execute("DELETE FROM birthdays WHERE guild_id = ?", (self.guild_id,))
+                await self.bot.db.db.execute("DELETE FROM config WHERE guild_id = ?", (self.guild_id,))
+                await self.bot.db.db.execute("DELETE FROM wished_today WHERE guild_id = ?", (self.guild_id,))
+                await self.bot.db.db.commit()
 
+                logger.info(f"🧹 {interaction_button.user.display_name} wiped all data for guild {interaction_button.guild.name}")
+                await interaction_button.followup.send(
+                    "✅ All guild data has been wiped. You can now run `/setup` again.",
+                    ephemeral=True
+                )
+            except Exception as e:
+                logger.error(f"Error wiping guild data: {e}", exc_info=True)
+                await interaction_button.followup.send(
+                    "🚨 Failed to wipe guild data.", ephemeral=True
+                )
+
+            self.stop()
+
+        @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+        async def cancel(self, interaction_button: discord.Interaction, button: Button):
+            if interaction_button.user.id != self.author_id:
+                await interaction_button.response.send_message(
+                    "❌ You cannot cancel this.", ephemeral=True
+                )
+                return
+            await interaction_button.response.edit_message(
+                content="❌ Wipe cancelled.", view=None
+            )
+            self.stop()
+
+    view = WipeConfirmView(self.bot, interaction.guild.id, interaction.user.id)
+    await interaction.response.send_message(
+        "⚠️ Are you sure you want to wipe all guild data? This cannot be undone!",
+        view=view,
+        ephemeral=True
+    )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))
