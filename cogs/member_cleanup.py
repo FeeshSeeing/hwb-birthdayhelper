@@ -19,9 +19,9 @@ class MemberCleanup(commands.Cog):
 
             # Refresh pinned birthday message
             pinned_msg = await update_pinned_birthday_message(member.guild)
-            logger.info(f"Removed {member.display_name}'s birthday because they left server and refreshed pinned message in {member.guild.name}")
+            logger.info(f"👋🏼 Removed {member.display_name}'s birthday because they left server and refreshed pinned message in {member.guild.name}")
         except Exception as e:
-            logger.error(f"Error removing birthday for {member.display_name} in {member.guild.name}: {e}", exc_info=True)
+            logger.error(f"🚨 Error removing birthday for {member.display_name} in {member.guild.name}: {e}", exc_info=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MemberCleanup(bot))
