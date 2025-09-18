@@ -15,9 +15,9 @@ class Database:
         """Establishes the database connection and sets up the row factory."""
         if self.db is not None:
             logger.warning("⚠️ Database already connected.")
-        return
+            return  # <-- only return if already connected
+
         self.db = await aiosqlite.connect(self.db_file)
-        # This makes query results behave like dictionaries, which is cleaner.
         self.db.row_factory = aiosqlite.Row
         logger.info("✅ Database connection established.")
 
