@@ -159,7 +159,15 @@ class Birthdays(commands.Cog):
             lines = []
             for uid, bday in first_page:
                 member = interaction.guild.get_member(uid)
-                display_name = member.display_name if member else f"<@{uid}>"
+                if member:
+                    display_name = member.display_name  # Friendly nickname if they have one
+                else:
+                    # Try to fetch member from API if not in cache (optional)
+                    try:
+                        member = await interaction.guild.fetch_member(uid)
+                        display_name = member.display_name
+                    except discord.NotFound:
+                        display_name = f"User {uid}"  # Generic fallback
                 prefix = "・"
                 if is_birthday_on_date(bday, today):
                     prefix += CONFETTI_ICON
