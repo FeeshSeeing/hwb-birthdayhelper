@@ -9,6 +9,7 @@ CONFETTI_ICON = "🎉 "
 
 
 def parse_day_month_input(day_input, month_input):
+    """Parse user input for day and month into integers."""
     try:
         day = int(day_input)
         month = int(month_input)
@@ -20,14 +21,17 @@ def parse_day_month_input(day_input, month_input):
 
 
 def format_birthday_display(birthday_str):
+    """Convert 'MM-DD' into a readable format with suffix."""
     try:
         month_str, day_str = birthday_str.split("-")
         month, day = int(month_str), int(day_str)
         month_name = calendar.month_name[month]
+
         if 4 <= day <= 20 or 24 <= day <= 30:
             suffix = "th"
         else:
             suffix = ["st", "nd", "rd"][(day % 10) - 1] if 1 <= day % 10 <= 3 else "th"
+
         return f"{day}{suffix} {month_name}"
     except Exception as e:
         logger.error(f"Error formatting birthday '{birthday_str}': {e}")
@@ -35,6 +39,7 @@ def format_birthday_display(birthday_str):
 
 
 def is_birthday_on_date(birthday_str: str, check_date: dt.datetime) -> bool:
+    """Check if a birthday occurs on the given date (handles Feb 29)."""
     b_month, b_day = map(int, birthday_str.split("-"))
     if b_month == 2 and b_day == 29:
         is_leap_year = (check_date.year % 4 == 0 and (check_date.year % 100 != 0 or check_date.year % 400 == 0))
@@ -108,6 +113,8 @@ async def update_pinned_birthday_message(
     manual: bool = False
 ) -> discord.Message | None:
     """Update (or create) the pinned birthday message with content + buttons."""
+
+    # Fetch guild config from the db instance
     guild_config = await db.get_guild_config(str(guild.id))
     if not guild_config:
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")

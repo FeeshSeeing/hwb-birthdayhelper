@@ -2,7 +2,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from utils import update_pinned_birthday_message, is_birthday_on_date
-from database import get_birthdays
 from logger import logger
 import datetime as dt
 
@@ -41,22 +40,27 @@ class SetupCog(commands.Cog):
         try:
             # Save config via persistent DB
             await self.bot.db.set_guild_config(
-                guild_id=interaction.guild.id,
-                channel_id=channel.id,
-                birthday_role_id=birthday_role.id if birthday_role else None,
-                mod_role_id=mod_role.id if mod_role else None,
+                guild_id=str(interaction.guild.id),
+                channel_id=str(channel.id),
+                birthday_role_id=str(birthday_role.id) if birthday_role else None,
+                mod_role_id=str(mod_role.id) if mod_role else None,
                 check_hour=check_hour
             )
 
             # Highlight birthdays happening today
-            birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
+            birthdays = await self.bot.db.get_birthdays(str(interaction.guild.id))
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [
                 user_id for user_id, bday in birthdays
                 if is_birthday_on_date(bday, today)
             ]
 
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            pinned_msg = await update_pinned_birthday_message(
+                interaction.guild,
+                db=self.bot.db,
+                highlight_today=birthdays_today
+            )
+
             if pinned_msg and not pinned_msg.pinned:
                 try:
                     await pinned_msg.pin()
@@ -71,6 +75,7 @@ class SetupCog(commands.Cog):
             except Exception as e:
                 logger.error(f"Failed to sync commands for {interaction.guild.name}: {e}")
 
+            # Confirmation message
             confirmation_lines = [
                 "✅ HWB-BirthdayHelper is now configured!",
                 f"Birthdays will post in {channel.mention} at {check_hour}:00 UTC.",
@@ -91,6 +96,7 @@ class SetupCog(commands.Cog):
             await interaction.followup.send(
                 "🚨 An unexpected error occurred during setup. Please try again later or check logs.", ephemeral=True
             )
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(SetupCog(bot))

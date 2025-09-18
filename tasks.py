@@ -62,29 +62,30 @@ async def check_and_send_birthdays(bot, db, guild: discord.Guild, today_override
 
     # Resolve channel
     channel_id = config.get("channel_id")
-    channel = guild.get_channel(int(channel_id)) if channel_id else None
-    if not channel:
-        try:
-            channel = await guild.fetch_channel(int(channel_id))
-            logger.info(f"✅ Fetched birthday channel {channel.name} for {guild_name}")
-        except Exception as e:
-            logger.warning(f"❌ Cannot find/access birthday channel {channel_id} in {guild_name}: {e}")
-            return
+    if not channel_id:
+        logger.warning(f"❗ No channel ID set for {guild_name}.")
+        return
 
-    # Resolve role
+    channel = guild.get_channel(int(channel_id)) or await guild.fetch_channel(int(channel_id))
+    perms = channel.permissions_for(guild.me)
+    if not perms.send_messages:
+        logger.error(f"Cannot send messages in channel {channel.name} ({channel.id})")
+        return
+
+    # Resolve birthday role
     role_id = config.get("birthday_role_id")
     role = None
     if role_id:
         try:
-            role_id_int = int(role_id)
-            role = guild.get_role(role_id_int)
-            if not role and guild.id not in already_logged_missing_roles_add:
+            role_id_str = str(role_id)
+            role = guild.get_role(int(role_id_str))
+            if not role and str(guild.id) not in already_logged_missing_roles_add:
                 try:
-                    role = await guild.fetch_role(role_id_int)
+                    role = await guild.fetch_role(int(role_id_str))
                     logger.info(f"✅ Fetched birthday role {role.name} via API for {guild_name}")
                 except Exception as e:
-                    logger.warning(f"❗ Cannot find/access birthday role {role_id_int} in {guild_name}: {e}")
-                    already_logged_missing_roles_add.add(guild.id)
+                    logger.warning(f"❗ Cannot find/access birthday role {role_id_str} in {guild_name}: {e}")
+                    already_logged_missing_roles_add.add(str(guild.id))
         except (TypeError, ValueError):
             logger.warning(f"❗ Invalid birthday role ID in {guild_name}, skipping role assignment.")
 
@@ -97,6 +98,7 @@ async def check_and_send_birthdays(bot, db, guild: discord.Guild, today_override
 
     sent_this_loop = set()
     for user_id, birthday in birthdays:
+        user_id = str(user_id)
         if user_id in sent_this_loop:
             continue
 
@@ -141,11 +143,11 @@ async def remove_birthday_roles(db, guild: discord.Guild):
     role = None
     if config and config.get("birthday_role_id"):
         try:
-            role_id_int = int(config["birthday_role_id"])
-            role = guild.get_role(role_id_int)
-            if not role and guild.id not in already_logged_missing_roles_remove:
-                logger.warning(f"❗ Birthday role {role_id_int} not found in {guild.name}. Skipping removal.")
-                already_logged_missing_roles_remove.add(guild.id)
+            role_id_str = str(config["birthday_role_id"])
+            role = guild.get_role(int(role_id_str))
+            if not role and str(guild.id) not in already_logged_missing_roles_remove:
+                logger.warning(f"❗ Birthday role {role_id_str} not found in {guild.name}. Skipping removal.")
+                already_logged_missing_roles_remove.add(str(guild.id))
         except (TypeError, ValueError):
             logger.warning(f"❗ Invalid birthday role ID in {guild.name}, skipping removal.")
 
