@@ -194,7 +194,7 @@ class Admin(commands.Cog):
                 await interaction_button.response.edit_message(content="🧹 Wipe confirmed. Deleting guild data...", view=None)
                 try:
                     await self.bot.db.db.execute("DELETE FROM birthdays WHERE guild_id = ?", (self.guild_id,))
-                    await self.bot.db.db.execute("DELETE FROM config WHERE guild_id = ?", (self.guild_id,))
+                    await self.bot.db.db.execute("DELETE FROM guild_config WHERE guild_id = ?", (self.guild_id,))
                     await self.bot.db.db.execute("DELETE FROM wished_today WHERE guild_id = ?", (self.guild_id,))
                     await self.bot.db.db.commit()
 
