@@ -17,7 +17,7 @@ class MemberCleanup(commands.Cog):
             await self.bot.db.delete_birthday(guild_id, user_id)
 
             # Refresh pinned birthday message (pass db!)
-            await update_pinned_birthday_message(member.guild, db=self.bot.db)
+            await update_pinned_birthday_message(member.guild, db=self.bot.db, manual=True)
             logger.info(
                 f"👋 Removed {member.display_name}'s birthday because they left the server and refreshed pinned message in {member.guild.name}"
             )
