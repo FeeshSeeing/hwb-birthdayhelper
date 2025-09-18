@@ -5,15 +5,17 @@ from utils import parse_day_month_input, format_birthday_display, update_pinned_
 from logger import logger
 import datetime as dt
 
-
-def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> bool:
+def is_admin_or_mod(member: discord.Member, mod_role_id: int | str | None = None) -> bool:
     """Checks if a member has administrator permissions or the configured moderator role."""
     if member.guild_permissions.administrator:
         return True
     if mod_role_id:
+        try:
+            mod_role_id = int(mod_role_id)  # Ensure we compare as int
+        except (TypeError, ValueError):
+            return False
         return any(role.id == mod_role_id for role in member.roles)
     return False
-
 
 async def ensure_setup(interaction: discord.Interaction, db) -> bool:
     """Ensure guild has setup done; if wiped, tell user to run /setup."""
@@ -25,7 +27,6 @@ async def ensure_setup(interaction: discord.Interaction, db) -> bool:
         )
         return False
     return True
-
 
 class Admin(commands.Cog):
     def __init__(self, bot):
