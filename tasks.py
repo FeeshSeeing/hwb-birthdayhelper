@@ -130,7 +130,7 @@ async def check_and_send_birthdays(bot, db, guild: discord.Guild, today_override
 
     # Update pinned message
     try:
-        await update_pinned_birthday_message(guild, highlight_today=todays_birthdays)
+        await update_pinned_birthday_message(guild, db=db, highlight_today=todays_birthdays)
         logger.info(f"📌 Pinned message updated for {guild_name}")
     except Exception as e:
         logger.error(f"❌ Failed to update pinned message for {guild_name}: {e}")
@@ -182,7 +182,7 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
             for guild in bot.guilds:
                 await remove_birthday_roles(db, guild)
                 try:
-                    await update_pinned_birthday_message(guild)
+                    await update_pinned_birthday_message(guild, db=db)
                     logger.info(f"📌 Pinned message refreshed in {guild.name}")
                 except Exception as e:
                     logger.error(f"❌ Failed to refresh pinned message for {guild.name}: {e}")
