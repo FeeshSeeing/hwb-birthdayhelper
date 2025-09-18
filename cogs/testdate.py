@@ -3,14 +3,13 @@ from discord import app_commands
 from discord.ext import commands
 import datetime as dt
 from tasks import run_birthday_check_once
-from database import get_guild_config
 from .admin import is_admin_or_mod  # Relative import
 from logger import logger
 
 # -------------------- Helpers --------------------
-async def ensure_setup(interaction: discord.Interaction) -> bool:
+async def ensure_setup(interaction: discord.Interaction, db) -> bool:
     """Check if the guild has a config setup."""
-    guild_config = await get_guild_config(str(interaction.guild.id))
+    guild_config = await db.get_guild_config(interaction.guild.id)
     if not guild_config:
         try:
             await interaction.response.send_message(
@@ -31,14 +30,14 @@ class TestDateCog(commands.Cog):
         name="testdate",
         description="Run a birthday check for a specific date (Admin/Mod)"
     )
-    @app_commands.default_permissions(manage_guild=True)  # ✅ Hide from normal users
+    @app_commands.default_permissions(manage_guild=True)
     @app_commands.describe(date="Enter date in DD/MM/YYYY format")
     async def testdate(self, interaction: discord.Interaction, date: str):
         try:
-            if not await ensure_setup(interaction):
+            if not await ensure_setup(interaction, self.bot.db):
                 return
 
-            guild_config = await get_guild_config(str(interaction.guild.id))
+            guild_config = await self.bot.db.get_guild_config(interaction.guild.id)
             if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
                 await interaction.response.send_message(
                     "❗ You are not allowed to use this command.", ephemeral=True
@@ -75,24 +74,23 @@ class TestDateCog(commands.Cog):
                 return
 
             # Run birthday check
-            guild = interaction.guild
             try:
                 await run_birthday_check_once(
                     self.bot,
-                    guild=guild,
+                    guild=interaction.guild,
                     test_date=test_date,
-                    reset_wished=True  # ✅ ensures one message per user per guild
+                    reset_wished=True
                 )
                 await interaction.followup.send(
                     f"✅ Birthday check run for {test_date.strftime('%d/%m/%Y')} (UTC). Check the birthday channel.",
                     ephemeral=True
                 )
-                logger.info(f"Test birthday check run for {date} in guild {guild.id} by {interaction.user.id}")
+                logger.info(f"Test birthday check run for {date} in guild {interaction.guild.id} by {interaction.user.id}")
             except Exception as e:
                 await interaction.followup.send(
                     f"🚨 An error occurred while running the birthday check: {e}", ephemeral=True
                 )
-                logger.error(f"Error running birthday check once for guild {guild.id} with date {date} by {interaction.user.id}: {e}", exc_info=True)
+                logger.error(f"Error running birthday check once for guild {interaction.guild.id} with date {date} by {interaction.user.id}: {e}", exc_info=True)
 
         except Exception as e:
             try:

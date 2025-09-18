@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from database import set_birthday, delete_birthday, get_guild_config, get_birthdays
 from utils import parse_day_month_input, format_birthday_display, update_pinned_birthday_message, is_birthday_on_date
 from logger import logger
 import datetime as dt
@@ -11,7 +10,7 @@ ENTRIES_PER_PAGE = 20
 
 # ----------------- Setup Check -----------------
 async def ensure_setup(interaction: discord.Interaction) -> bool:
-    guild_config = await get_guild_config(str(interaction.guild.id))
+    guild_config = await interaction.client.db.get_guild_config(interaction.guild.id)
     if not guild_config:
         await interaction.response.send_message(
             "❗ Please run `/setup` first to configure HWB-BirthdayHelper for this server!",
@@ -31,9 +30,9 @@ class Birthdays(commands.Cog):
     async def refresh_pinned_messages(self):
         for guild in self.bot.guilds:
             try:
-                birthdays = await get_birthdays(str(guild.id))
+                birthdays = await self.bot.db.get_birthdays(guild.id)
                 today = dt.datetime.now(dt.timezone.utc)
-                birthdays_today = [str(uid) for uid, bday in birthdays if is_birthday_on_date(bday, today)]
+                birthdays_today = [uid for uid, bday in birthdays if is_birthday_on_date(bday, today)]
                 await update_pinned_birthday_message(guild, highlight_today=birthdays_today)
             except Exception as e:
                 logger.error(f"Failed daily pinned refresh in {guild.name}: {e}")
@@ -53,22 +52,15 @@ class Birthdays(commands.Cog):
         if not result:
             await interaction.followup.send("❗ Invalid day/month! Example: 25 12", ephemeral=True)
             return
+
         day, month = result
         birthday_str = f"{month:02d}-{day:02d}"
 
         try:
-            # Pass username for logging only
-            await set_birthday(
-                str(interaction.guild.id),
-                str(interaction.user.id),
-                birthday_str,
-                username=interaction.user.display_name
-            )
-            all_birthdays = await get_birthdays(str(interaction.guild.id))
+            await self.bot.db.set_birthday(interaction.guild.id, interaction.user.id, birthday_str)
+            all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [
-                str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)
-            ]
+            birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
         except Exception as e:
             logger.error(f"Error setting birthday for {interaction.user.display_name}: {e}")
@@ -85,17 +77,12 @@ class Birthdays(commands.Cog):
         if not await ensure_setup(interaction):
             return
         await interaction.response.defer(ephemeral=True)
+
         try:
-            await delete_birthday(
-                str(interaction.guild.id),
-                str(interaction.user.id),
-                username=interaction.user.display_name
-            )
-            all_birthdays = await get_birthdays(str(interaction.guild.id))
+            await self.bot.db.delete_birthday(interaction.guild.id, interaction.user.id)
+            all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [
-                str(uid) for uid, bday in all_birthdays if is_birthday_on_date(bday, today)
-            ]
+            birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
         except Exception as e:
             logger.error(f"Error deleting birthday for {interaction.user.display_name}: {e}")
@@ -109,14 +96,15 @@ class Birthdays(commands.Cog):
         if not await ensure_setup(interaction):
             return
         await interaction.response.defer(ephemeral=True)
+
         try:
-            birthdays = await get_birthdays(str(interaction.guild.id))
+            birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             if not birthdays:
                 await interaction.followup.send("📂 No birthdays found yet.", ephemeral=True)
                 return
 
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [str(uid) for uid, bday in birthdays if is_birthday_on_date(bday, today)]
+            birthdays_today = [uid for uid, bday in birthdays if is_birthday_on_date(bday, today)]
             await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
 
             # Sort upcoming birthdays
@@ -134,12 +122,12 @@ class Birthdays(commands.Cog):
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
             first_page = birthdays_sorted[:ENTRIES_PER_PAGE]
 
-            guild_config = await get_guild_config(str(interaction.guild.id))
+            guild_config = await self.bot.db.get_guild_config(interaction.guild.id)
             check_hour = guild_config.get("check_hour", 7)
 
             lines = []
             for uid, bday in first_page:
-                member = interaction.guild.get_member(int(uid))
+                member = interaction.guild.get_member(uid)
                 display_name = member.display_name if member else f"<@{uid}>"
                 prefix = "・"
                 if is_birthday_on_date(bday, today):
@@ -154,7 +142,6 @@ class Birthdays(commands.Cog):
             content += f"-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
 
             await interaction.followup.send(content=content, ephemeral=True)
-
         except Exception as e:
             logger.error(f"Error viewing birthdays: {e}")
             await interaction.followup.send("🚨 Failed to view birthday list. Try again later.", ephemeral=True)

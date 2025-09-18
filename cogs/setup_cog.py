@@ -1,10 +1,8 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import aiosqlite
-from config import DB_FILE
-from database import get_birthdays
 from utils import update_pinned_birthday_message, is_birthday_on_date
+from database import get_birthdays
 from logger import logger
 import datetime as dt
 
@@ -16,8 +14,8 @@ class SetupCog(commands.Cog):
         name="setup",
         description="Setup the bot for your server"
     )
-    @app_commands.default_permissions(manage_guild=True)  # ✅ Hide from non-admin users
-    @app_commands.checks.has_permissions(administrator=True)  # ✅ Only admins can execute
+    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(administrator=True)
     async def setup(
         self,
         interaction: discord.Interaction,
@@ -28,44 +26,30 @@ class SetupCog(commands.Cog):
     ):
         check_hour = max(0, min(check_hour, 23))
 
-        # Double check (extra safety in case of Discord desync)
+        # Extra safety in case of Discord desync
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
                 "❗ You are not allowed to use this.", ephemeral=True
             )
             logger.warning(
-                f"Unauthorized setup attempt by {interaction.user.name}#{interaction.user.discriminator} "
-                f"in {interaction.guild.name}"
+                f"Unauthorized setup attempt by {interaction.user} in {interaction.guild.name}"
             )
             return
 
         await interaction.response.defer(ephemeral=True)
 
         try:
-            # Save config to DB
-            async with aiosqlite.connect(DB_FILE) as db:
-                await db.execute(
-                    """
-                    INSERT INTO guild_config (guild_id, channel_id, birthday_role_id, mod_role_id, check_hour)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(guild_id) DO UPDATE SET
-                        channel_id=excluded.channel_id,
-                        birthday_role_id=excluded.birthday_role_id,
-                        mod_role_id=excluded.mod_role_id,
-                        check_hour=excluded.check_hour
-                    """,
-                    (
-                        str(interaction.guild.id),
-                        str(channel.id),
-                        str(birthday_role.id) if birthday_role else None,
-                        str(mod_role.id) if mod_role else None,
-                        check_hour
-                    )
-                )
-                await db.commit()
+            # Save config via persistent DB
+            await self.bot.db.set_guild_config(
+                guild_id=interaction.guild.id,
+                channel_id=channel.id,
+                birthday_role_id=birthday_role.id if birthday_role else None,
+                mod_role_id=mod_role.id if mod_role else None,
+                check_hour=check_hour
+            )
 
             # Highlight birthdays happening today
-            birthdays = await get_birthdays(str(interaction.guild.id))
+            birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [
                 user_id for user_id, bday in birthdays
@@ -99,17 +83,11 @@ class SetupCog(commands.Cog):
                     "in the server role hierarchy, otherwise it cannot assign it."
                 )
 
-            logger.info(
-                f"Bot setup completed by {interaction.user.name}#{interaction.user.discriminator} "
-                f"in {interaction.guild.name}"
-            )
+            logger.info(f"Bot setup completed by {interaction.user} in {interaction.guild.name}")
             await interaction.followup.send("\n".join(confirmation_lines), ephemeral=True)
 
         except Exception as e:
-            logger.error(
-                f"Error during setup for {interaction.guild.name} by {interaction.user.name}#{interaction.user.discriminator}: {e}",
-                exc_info=True
-            )
+            logger.error(f"Error during setup for {interaction.guild.name} by {interaction.user}: {e}", exc_info=True)
             await interaction.followup.send(
                 "🚨 An unexpected error occurred during setup. Please try again later or check logs.", ephemeral=True
             )
