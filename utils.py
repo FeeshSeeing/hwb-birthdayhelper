@@ -1,7 +1,6 @@
 import calendar
 import discord
 import datetime as dt
-from database import get_birthdays, get_guild_config
 from logger import logger
 from discord.ui import View, Button
 
@@ -53,7 +52,6 @@ class BirthdayPages(discord.ui.View):
         self.check_hour = check_hour
         self.current = 0
 
-        # Only show pagination buttons if more than 1 page
         if len(self.pages) > 1:
             self.previous_button = Button(label="⬅️", style=discord.ButtonStyle.primary, disabled=True)
             self.next_button = Button(label="➡️", style=discord.ButtonStyle.primary)
@@ -110,7 +108,7 @@ async def update_pinned_birthday_message(
     manual: bool = False
 ) -> discord.Message | None:
     """Update (or create) the pinned birthday message with content + buttons."""
-    guild_config = await get_guild_config(db, str(guild.id))
+    guild_config = await db.get_guild_config(str(guild.id))
     if not guild_config:
         logger.warning(f"No guild config for {guild.name}, skipping pinned message update.")
         return None
@@ -128,7 +126,7 @@ async def update_pinned_birthday_message(
         return None
 
     check_hour = guild_config.get("check_hour", 9)
-    birthdays = await get_birthdays(db, str(guild.id))
+    birthdays = await db.get_birthdays(str(guild.id))
     today = dt.datetime.now(dt.timezone.utc)
 
     if not birthdays:
@@ -151,7 +149,6 @@ async def update_pinned_birthday_message(
 
     sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
 
-    # Pagination
     pages = [sorted_birthdays[i:i + MAX_PINNED_ENTRIES] for i in range(0, len(sorted_birthdays), MAX_PINNED_ENTRIES)]
     view = BirthdayPages(pages, guild, check_hour)
     view.current = 0
@@ -172,7 +169,6 @@ async def update_pinned_birthday_message(
         content += f"\n\nPage 1/{len(pages)}"
 
     pinned_msg = None
-    # Fetch stored pinned message ID
     async with db.db.execute(
         "SELECT value FROM config WHERE key=?", (f"pinned_birthday_msg_{guild.id}",)
     ) as cursor:
