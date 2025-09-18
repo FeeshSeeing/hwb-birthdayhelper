@@ -127,13 +127,27 @@ class Birthdays(commands.Cog):
             # Sort upcoming birthdays
             def upcoming_sort_key(b):
                 month, day = map(int, b[1].split("-"))
-                if month == 2 and day == 29:
-                    is_leap = today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0)
-                    if not is_leap:
-                        day = 28
-                current = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
+
+                # Adjust Feb 29 on non-leap years
+                try:
+                    current = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
+                except ValueError:
+                    if month == 2 and day == 29:
+                        current = dt.datetime(today.year, 2, 28, tzinfo=dt.timezone.utc)
+                    else:
+                        # Log invalid birthdays and skip them
+                        logger.warning(f"Invalid birthday {b[1]} for user {b[0]}")
+                        return float("inf")  # Push invalid birthdays to the end
+
                 if current < today and not is_birthday_on_date(b[1], today):
-                    current = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
+                    try:
+                        current = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
+                    except ValueError:
+                        if month == 2 and day == 29:
+                            current = dt.datetime(today.year + 1, 2, 28, tzinfo=dt.timezone.utc)
+                        else:
+                            return float("inf")
+
                 return (current - today).total_seconds()
 
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
