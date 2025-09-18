@@ -5,7 +5,7 @@ from discord import app_commands
 import aiosqlite
 from config import DB_FILE
 from database import get_guild_config
-from admin import is_admin_or_mod  # ✅ Reuse the same helper for mod check
+from cogs.admin import is_admin_or_mod
 
 class DebugCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
