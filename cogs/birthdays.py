@@ -137,13 +137,19 @@ class Birthdays(commands.Cog):
             guild_config = await get_guild_config(str(interaction.guild.id))
             check_hour = guild_config.get("check_hour", 7)
 
+            lines = []
+            for uid, bday in first_page:
+                member = interaction.guild.get_member(int(uid))
+                display_name = member.display_name if member else f"<@{uid}>"
+                prefix = "・"
+                if is_birthday_on_date(bday, today):
+                    prefix += CONFETTI_ICON
+                prefix += " "
+                lines.append(f"{prefix}{display_name} - {format_birthday_display(bday)}")
+
             content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n"
-            content += "\n".join([
-                f"{'・' + CONFETTI_ICON if is_birthday_on_date(bday, today) else ''} "
-                f"{interaction.guild.get_member(int(uid)).display_name if interaction.guild.get_member(int(uid)) else f'<@{uid}>'} - {format_birthday_display(bday)}"
-                for uid, bday in first_page
-            ])
-            content += "\n\n"  # extra spacing before footer
+            content += "\n".join(lines)
+            content += "\n\n"
             content += "-# 💡 Tip: Use /setbirthday to add your own special day!\n"
             content += f"-# ⏰ Bot checks birthdays daily at {check_hour}:00 UTC"
 
