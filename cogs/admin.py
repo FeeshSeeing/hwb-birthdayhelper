@@ -19,10 +19,11 @@ def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> b
     return False
 
 async def ensure_setup(interaction: discord.Interaction) -> bool:
+    """Ensure guild has setup done; if wiped, tell user to run /setup."""
     guild_config = await get_guild_config(str(interaction.guild.id))
     if not guild_config:
         await interaction.response.send_message(
-            "❗ Please run `/setup` first to configure HWB-BirthdayHelper for this server!",
+            "❗ This server has no configuration. Please run `/setup` first to configure HWB-BirthdayHelper.",
             ephemeral=True
         )
         return False
@@ -188,29 +189,38 @@ class Admin(commands.Cog):
             logger.error(f"Error importing birthdays for guild {interaction.guild.name} by {interaction.user.display_name}: {e}", exc_info=True)
             await interaction.followup.send(f"🚨 Error importing birthdays: {e}", ephemeral=True)
 
-    @app_commands.command(name="wipeguild", description="Completely wipe all birthdays and config for this server (Admin/Mod)")
+    @app_commands.command(name="wipeguild", description="Completely remove all birthdays, config, and wished data for this server (Admin/Mod)")
     @app_commands.default_permissions(manage_guild=True)
     async def wipeguild(self, interaction: discord.Interaction):
         if not await ensure_setup(interaction):
             return
 
         guild_config = await get_guild_config(str(interaction.guild.id))
-        if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id")):
+        if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id") if guild_config else None):
             await interaction.response.send_message("❗ You are not allowed to use this.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
         try:
             async with aiosqlite.connect(DB_FILE) as db:
+                # Delete all rows related to this guild
                 await db.execute("DELETE FROM birthdays WHERE guild_id = ?", (str(interaction.guild.id),))
                 await db.execute("DELETE FROM guild_config WHERE guild_id = ?", (str(interaction.guild.id),))
+                await db.execute("DELETE FROM wished_today WHERE guild_id = ?", (str(interaction.guild.id),))
                 await db.commit()
 
-            logger.info(f"🧹 {interaction.user.display_name} wiped guild {interaction.guild.name}")
-            await interaction.followup.send("✅ Guild data wiped. Please run `/setup` again.", ephemeral=True)
+            logger.info(f"🧹 {interaction.user.display_name} wiped all data for guild {interaction.guild.name}")
+            await interaction.followup.send(
+                "🧹 All guild data has been wiped. You can now run `/setup` again.",
+                ephemeral=True
+            )
+
         except Exception as e:
             logger.error(f"Error wiping guild {interaction.guild.name} by {interaction.user.display_name}: {e}", exc_info=True)
-            await interaction.followup.send("🚨 Failed to wipe guild data. Try again later.", ephemeral=True)
+            await interaction.followup.send(
+                "🚨 Failed to wipe guild data. Try again later.",
+                ephemeral=True
+            )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))
