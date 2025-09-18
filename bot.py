@@ -23,7 +23,7 @@ COGS_TO_LOAD = [
 
 class BirthdayBot(commands.Bot):
     def __init__(self):
-        super().__init__(intents=intents)
+        super().__init__(command_prefix="!", intents=intents)
         self.db = Database(DB_FILE)  # Single persistent DB instance
         self.birthday_task = None
 
