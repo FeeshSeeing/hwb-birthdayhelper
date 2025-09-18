@@ -10,7 +10,7 @@
 - `/deletebirthday`  
   Delete your own birthday.
 
-- `/listbirthdays`  
+- `/viewbirthdays`  
   Refreshes and pins the birthday list.
 
 - `/setuserbirthday user:<user> day:<day> month:<month>`  

@@ -97,7 +97,7 @@
 | `/clearwished`     | Admins + Mods       | Admins + Mods               | Clears the "wished today" list (for testing) |
 | `/setbirthday`     | Everyone            | Everyone                    | Users set their own birthdays |
 | `/mybirthday`      | Everyone            | Everyone                    | Users can view their saved birthday |
-| `/listbirthdays`   | Everyone            | Everyone                    | Show a list of all birthdays in the server |
+| `/viewbirthdays`   | Everyone            | Everyone                    | Show a list of all birthdays in the server |
 
 > ✅ **Admins** = Discord users with Administrator permission  
 > ✅ **Mods** = Users with the moderator role you set during `/setup`  

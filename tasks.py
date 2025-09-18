@@ -171,10 +171,10 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
     await clear_old_wishes()  # Clean old entries (7 days default)
     logger.info(f"🕒 Birthday check loop started (every {interval_minutes} minutes)")
 
-    last_checked_date = None
+    last_reset_date = None
     already_checked_guilds = set()
     last_heartbeat = None
-    HEARTBEAT_INTERVAL = 30
+    HEARTBEAT_INTERVAL = 30  # minutes
 
     await asyncio.sleep(5)
 
@@ -183,10 +183,20 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
         today_str = now.strftime("%Y-%m-%d")
         current_hour = now.hour
 
-        if last_checked_date != today_str:
-            last_checked_date = today_str
-            already_checked_guilds.clear()
+        # Role reset + pinned message refresh at UTC midnight
+        if last_reset_date != today_str and now.hour == 0:
+            logger.info("🌙 Midnight UTC reached. Removing birthday roles and refreshing pinned messages.")
+            for guild in bot.guilds:
+                await remove_birthday_roles(guild)
+                try:
+                    await update_pinned_birthday_message(guild)  # refresh without highlight
+                    logger.info(f"📌 Pinned message refreshed in {guild.name}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to refresh pinned message for {guild.name}: {e}")
+            last_reset_date = today_str
+            already_checked_guilds.clear()  # so birthday wishes can still run later in the day
 
+        # Birthday wishes (respect check_hour)
         for guild in bot.guilds:
             config = await get_guild_config(str(guild.id))
             if not config or "check_hour" not in config:
@@ -197,10 +207,10 @@ async def birthday_check_loop(bot: discord.Client, interval_minutes: int = 5):
                 continue
 
             if current_hour >= check_hour:
-                await remove_birthday_roles(guild)
                 await check_and_send_birthdays(guild)
                 already_checked_guilds.add(guild.id)
 
+        # 💓 Heartbeat logging
         if last_heartbeat is None or (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL * 60:
             logger.info(f"💓 Birthday check loop alive at {now.strftime('%Y-%m-%d %H:%M:%S UTC')}")
             last_heartbeat = now
