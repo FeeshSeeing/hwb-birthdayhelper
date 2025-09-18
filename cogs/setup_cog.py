@@ -58,7 +58,8 @@ class SetupCog(commands.Cog):
             pinned_msg = await update_pinned_birthday_message(
                 interaction.guild,
                 db=self.bot.db,
-                highlight_today=birthdays_today
+                highlight_today=birthdays_today,
+                manual=True
             )
 
             if pinned_msg and not pinned_msg.pinned:
