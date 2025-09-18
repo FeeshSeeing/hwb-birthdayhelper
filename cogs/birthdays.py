@@ -33,7 +33,11 @@ class Birthdays(commands.Cog):
                 birthdays = await self.bot.db.get_birthdays(guild.id)
                 today = dt.datetime.now(dt.timezone.utc)
                 birthdays_today = [uid for uid, bday in birthdays if is_birthday_on_date(bday, today)]
-                await update_pinned_birthday_message(guild, highlight_today=birthdays_today)
+                await update_pinned_birthday_message(
+                    guild,
+                    db=self.bot.db,
+                    highlight_today=birthdays_today
+                )
             except Exception as e:
                 logger.error(f"Failed daily pinned refresh in {guild.name}: {e}")
 
@@ -61,7 +65,11 @@ class Birthdays(commands.Cog):
             all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            await update_pinned_birthday_message(
+                interaction.guild,
+                db=self.bot.db,
+                highlight_today=birthdays_today
+            )
         except Exception as e:
             logger.error(f"Error setting birthday for {interaction.user.display_name}: {e}")
             await interaction.followup.send("🚨 Failed to set birthday. Try again later.", ephemeral=True)
@@ -83,7 +91,11 @@ class Birthdays(commands.Cog):
             all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            await update_pinned_birthday_message(
+                interaction.guild,
+                db=self.bot.db,
+                highlight_today=birthdays_today
+            )
         except Exception as e:
             logger.error(f"Error deleting birthday for {interaction.user.display_name}: {e}")
             await interaction.followup.send("🚨 Failed to delete birthday. Try again later.", ephemeral=True)
@@ -105,7 +117,12 @@ class Birthdays(commands.Cog):
 
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [uid for uid, bday in birthdays if is_birthday_on_date(bday, today)]
-            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today, manual=True)
+            await update_pinned_birthday_message(
+                interaction.guild,
+                db=self.bot.db,
+                highlight_today=birthdays_today,
+                manual=True
+            )
 
             # Sort upcoming birthdays
             def upcoming_sort_key(b):
