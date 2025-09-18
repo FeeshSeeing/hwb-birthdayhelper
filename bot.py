@@ -25,7 +25,7 @@ COGS_TO_LOAD = [
 class BirthdayBot(commands.Bot):
     def __init__(self):
         # No command_prefix is needed for a slash-command-only bot
-        super().__init__(intents=intents)
+        super().__init__(command_prefix=commands.when_mentioned, intents=intents)
         self.birthday_task = None
 
     async def setup_hook(self):
