@@ -139,7 +139,7 @@ class Birthdays(commands.Cog):
 
             content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n"
             content += "\n".join([
-                f"{'・'+ CONFETTI_ICON if is_birthday_on_date(bday, today) else ""} "
+                f"{'・' + CONFETTI_ICON if is_birthday_on_date(bday, today) else ''} "
                 f"{interaction.guild.get_member(int(uid)).display_name if interaction.guild.get_member(int(uid)) else f'<@{uid}>'} - {format_birthday_display(bday)}"
                 for uid, bday in first_page
             ])
