@@ -154,15 +154,27 @@ async def update_pinned_birthday_message(
         content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n```yaml\nNo birthdays found!\n```"
         view_to_use = None
     else:
-        # Sort birthdays by upcoming date
+        # Safe upcoming_sort_key that handles Feb 29
         def upcoming_sort_key(b):
             month, day = map(int, b[1].split("-"))
+            year = today.year
+
+            # Adjust Feb 29 on non-leap years
+            if month == 2 and day == 29:
+                is_leap = (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0))
+                if not is_leap:
+                    day = 28
+
             try:
-                current_year_birthday = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
+                current_year_birthday = dt.datetime(year, month, day, tzinfo=dt.timezone.utc)
             except ValueError:
-                current_year_birthday = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
+                current_year_birthday = dt.datetime(year + 1, month, day, tzinfo=dt.timezone.utc)
+
+            # If birthday already passed this year (and today isn’t their birthday), use next year
             if current_year_birthday < today and not is_birthday_on_date(b[1], today):
-                return (dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc) - today).total_seconds()
+                next_year_birthday = dt.datetime(year + 1, month, day, tzinfo=dt.timezone.utc)
+                return (next_year_birthday - today).total_seconds()
+
             return (current_year_birthday - today).total_seconds()
 
         sorted_birthdays = sorted(birthdays, key=upcoming_sort_key)
