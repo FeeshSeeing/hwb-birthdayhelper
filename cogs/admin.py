@@ -5,6 +5,7 @@ from utils import parse_day_month_input, format_birthday_display, update_pinned_
 from logger import logger
 import datetime as dt
 
+
 def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> bool:
     """Checks if a member has administrator permissions or the configured moderator role."""
     if member.guild_permissions.administrator:
@@ -12,6 +13,7 @@ def is_admin_or_mod(member: discord.Member, mod_role_id: int | None = None) -> b
     if mod_role_id:
         return any(role.id == mod_role_id for role in member.roles)
     return False
+
 
 async def ensure_setup(interaction: discord.Interaction, db) -> bool:
     """Ensure guild has setup done; if wiped, tell user to run /setup."""
@@ -24,10 +26,12 @@ async def ensure_setup(interaction: discord.Interaction, db) -> bool:
         return False
     return True
 
+
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # ---------------- Admin / Mod Set Birthday ----------------
     @app_commands.command(name="setuserbirthday", description="Set a birthday for another user (Admin/Mod)")
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.describe(user="User", day="Day", month="Month")
@@ -42,6 +46,7 @@ class Admin(commands.Cog):
             return
 
         await interaction.response.defer(ephemeral=True)
+
         result = parse_day_month_input(day, month)
         if not result:
             await interaction.followup.send("❗ Invalid day/month!", ephemeral=True)
@@ -53,11 +58,18 @@ class Admin(commands.Cog):
         try:
             await self.bot.db.set_birthday(interaction.guild.id, user.id, birthday_str)
 
+            # Update pinned birthday message
             all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-            pinned_msg = await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
 
+            pinned_msg = await update_pinned_birthday_message(
+                interaction.guild,
+                db=self.bot.db,
+                highlight_today=birthdays_today
+            )
+
+            # Ensure pinned
             if pinned_msg and not pinned_msg.pinned:
                 try:
                     await pinned_msg.pin()
@@ -72,6 +84,7 @@ class Admin(commands.Cog):
         logger.info(f"👑 {interaction.user.display_name} set {user.display_name}'s birthday to {birthday_str} in {interaction.guild.name}")
         await interaction.followup.send(f"💌 {user.display_name}'s birthday is set to {format_birthday_display(birthday_str)}.", ephemeral=True)
 
+    # ---------------- Admin / Mod Delete Birthday ----------------
     @app_commands.command(name="deleteuserbirthday", description="Delete a user's birthday (Admin/Mod)")
     @app_commands.default_permissions(manage_guild=True)
     async def deleteuserbirthday(self, interaction: discord.Interaction, user: discord.Member):
@@ -84,13 +97,20 @@ class Admin(commands.Cog):
             return
 
         await interaction.response.defer(ephemeral=True)
+
         try:
             await self.bot.db.delete_birthday(interaction.guild.id, user.id)
 
+            # Update pinned birthday message
             all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+
+            await update_pinned_birthday_message(
+                interaction.guild,
+                db=self.bot.db,
+                highlight_today=birthdays_today
+            )
 
         except Exception as e:
             logger.error(f"Error deleting birthday: {e}", exc_info=True)
@@ -99,6 +119,7 @@ class Admin(commands.Cog):
 
         await interaction.followup.send(f"🗑️ {user.display_name}'s birthday has been deleted.", ephemeral=True)
 
+    # ---------------- Admin / Mod Import Birthdays ----------------
     @app_commands.command(name="importbirthdays", description="Import birthdays from a message (Admin/Mod)")
     @app_commands.default_permissions(manage_guild=True)
     async def importbirthdays(self, interaction: discord.Interaction, channel: discord.TextChannel, message_id: str):
@@ -143,10 +164,15 @@ class Admin(commands.Cog):
                 await self.bot.db.set_birthday(interaction.guild.id, user_id, birthday_str)
                 updated_count += 1
 
+            # Update pinned birthday message
             all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
             birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
-            await update_pinned_birthday_message(interaction.guild, highlight_today=birthdays_today)
+            await update_pinned_birthday_message(
+                interaction.guild,
+                db=self.bot.db,
+                highlight_today=birthdays_today
+            )
 
             await interaction.followup.send(f"✅ Imported {updated_count} birthdays.", ephemeral=True)
 
@@ -156,6 +182,7 @@ class Admin(commands.Cog):
             logger.error(f"Error importing birthdays: {e}", exc_info=True)
             await interaction.followup.send("🚨 Error importing birthdays. Try again later.", ephemeral=True)
 
+    # ---------------- Admin / Mod Wipe Guild ----------------
     @app_commands.command(name="wipeguild", description="Completely remove all birthdays and config for this server (Admin/Mod)")
     @app_commands.default_permissions(manage_guild=True)
     async def wipeguild(self, interaction: discord.Interaction):
@@ -170,7 +197,7 @@ class Admin(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         try:
             await self.bot.db.db.execute("DELETE FROM birthdays WHERE guild_id = ?", (interaction.guild.id,))
-            await self.bot.db.db.execute("DELETE FROM guild_config WHERE guild_id = ?", (interaction.guild.id,))
+            await self.bot.db.db.execute("DELETE FROM config WHERE guild_id = ?", (interaction.guild.id,))
             await self.bot.db.db.execute("DELETE FROM wished_today WHERE guild_id = ?", (interaction.guild.id,))
             await self.bot.db.db.commit()
 
@@ -180,6 +207,7 @@ class Admin(commands.Cog):
         except Exception as e:
             logger.error(f"Error wiping guild data: {e}", exc_info=True)
             await interaction.followup.send("🚨 Failed to wipe guild data.", ephemeral=True)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))
