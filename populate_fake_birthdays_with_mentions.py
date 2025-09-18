@@ -1,4 +1,4 @@
-# populate_fake_birthdays_with_mentions.py
+# populate_fake_birthdays_enhanced.py
 import aiosqlite
 import random
 import datetime as dt
@@ -7,7 +7,7 @@ import asyncio
 DB_FILE = "birthdays.db"          # Your bot's DB file
 GUILD_ID = "1415476237618647154"   # Replace with your server ID
 NUM_USERS = 100                    # Total fake users to create
-TODAY_BIRTHDAYS = 2               # How many users to have birthday today
+TODAY_BIRTHDAYS = 3               # How many users to have birthday today
 
 # Example names for fake users
 FIRST_NAMES = ["Alex", "Sam", "Jordan", "Taylor", "Chris", "Pat", "Jamie", "Morgan", "Casey", "Drew"]
@@ -27,19 +27,18 @@ async def populate_fake_users():
             guild_id TEXT,
             user_id TEXT,
             birthday TEXT,
-            display_name TEXT,
             PRIMARY KEY (guild_id, user_id)
         )
         """)
         await db.commit()
 
+        # Pre-generate user IDs and birthdays
         birthdays_assigned_today = 0
 
         for i in range(1, NUM_USERS + 1):
             user_id = str(100000000000000000 + i)  # Fake Discord ID
-            display_name = random_name()
 
-            # Assign birthday
+            # Decide if this user should have birthday today
             if birthdays_assigned_today < TODAY_BIRTHDAYS and random.random() < 0.1:
                 birthday_str = today_str
                 birthdays_assigned_today += 1
@@ -55,19 +54,12 @@ async def populate_fake_users():
 
             # Insert into DB
             await db.execute(
-                "INSERT OR REPLACE INTO birthdays (guild_id, user_id, birthday, display_name) VALUES (?, ?, ?, ?)",
-                (GUILD_ID, user_id, birthday_str, display_name)
+                "INSERT OR REPLACE INTO birthdays (guild_id, user_id, birthday) VALUES (?, ?, ?)",
+                (GUILD_ID, user_id, birthday_str)
             )
 
         await db.commit()
         print(f"✅ Populated {NUM_USERS} fake users in guild {GUILD_ID}, with {birthdays_assigned_today} birthdays today.")
-
-        # Optional: print first 10 fake mentions
-        print("\nFirst 10 fake mentions:")
-        async with db.execute("SELECT user_id, display_name FROM birthdays WHERE guild_id = ? LIMIT 10", (GUILD_ID,)) as cursor:
-            rows = await cursor.fetchall()
-            for row in rows:
-                print(f"{row[1]}: <@{row[0]}>")
 
 if __name__ == "__main__":
     asyncio.run(populate_fake_users())
