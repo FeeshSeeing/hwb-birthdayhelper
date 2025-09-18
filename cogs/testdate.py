@@ -7,7 +7,7 @@ from .admin import is_admin_or_mod  # Relative import
 from logger import logger
 
 # -------------------- Helpers --------------------
-async def ensure_setup(interaction: discord.Interaction, db) -> bool:
+async def ensure_setup(interaction: "discord.Interaction", db) -> bool:
     """Check if the guild has a config setup."""
     guild_config = await db.get_guild_config(interaction.guild.id)
     if not guild_config:
@@ -23,7 +23,7 @@ async def ensure_setup(interaction: discord.Interaction, db) -> bool:
 
 # -------------------- Cog --------------------
 class TestDateCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @app_commands.command(
@@ -32,7 +32,7 @@ class TestDateCog(commands.Cog):
     )
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.describe(date="Enter date in DD/MM/YYYY format")
-    async def testdate(self, interaction: discord.Interaction, date: str):
+    async def testdate(self, interaction: "discord.Interaction", date: str):
         try:
             if not await ensure_setup(interaction, self.bot.db):
                 return
@@ -45,7 +45,6 @@ class TestDateCog(commands.Cog):
                 logger.warning(f"Unauthorized access: {interaction.user.id} attempted testdate in {interaction.guild.id}")
                 return
 
-            # Defer response
             await interaction.response.defer(ephemeral=True)
 
             # Parse date
@@ -54,7 +53,6 @@ class TestDateCog(commands.Cog):
                 day, month, year = int(day_str), int(month_str), int(year_str)
                 test_date = dt.datetime(year, month, day, tzinfo=dt.timezone.utc)
             except ValueError as ve:
-                # Special handling for Feb 29 on non-leap years
                 if "day is out of range for month" in str(ve) and month == 2 and day == 29:
                     test_date = dt.datetime(year, 2, 28, tzinfo=dt.timezone.utc)
                     await interaction.followup.send(
@@ -102,5 +100,5 @@ class TestDateCog(commands.Cog):
             logger.error(f"Unhandled error in /testdate command: {e}", exc_info=True)
 
 # -------------------- Setup --------------------
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(TestDateCog(bot))

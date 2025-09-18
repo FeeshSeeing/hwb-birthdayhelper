@@ -11,7 +11,7 @@ class DebugCog(commands.Cog):
 
     @app_commands.command(name="showwished", description="Show users who have already been wished today.")
     @app_commands.default_permissions(manage_guild=True)
-    async def show_wished(self, interaction: discord.Interaction):
+    async def show_wished(self, interaction: "discord.Interaction"):
         """Display the wished_today table for this guild."""
         guild_config = await self.bot.db.get_guild_config(interaction.guild.id)
         if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id") if guild_config else None):
@@ -41,7 +41,7 @@ class DebugCog(commands.Cog):
 
     @app_commands.command(name="clearwished", description="Clear today's wished users (FOR TESTING).")
     @app_commands.default_permissions(manage_guild=True)
-    async def clear_wished(self, interaction: discord.Interaction):
+    async def clear_wished(self, interaction: "discord.Interaction"):
         """Clear the wished_today table for this guild."""
         guild_config = await self.bot.db.get_guild_config(interaction.guild.id)
         if not is_admin_or_mod(interaction.user, guild_config.get("mod_role_id") if guild_config else None):
