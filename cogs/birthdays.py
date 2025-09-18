@@ -6,7 +6,7 @@ from utils import parse_day_month_input, format_birthday_display, update_pinned_
 from logger import logger
 import datetime as dt
 
-CONFETTI_ICON = "🎉"
+CONFETTI_ICON = "🎉 "
 ENTRIES_PER_PAGE = 20
 
 # ----------------- Setup Check -----------------
@@ -139,7 +139,7 @@ class Birthdays(commands.Cog):
 
             content = "🎂 BIRTHDAY LIST 🎂\n------------------------\n"
             content += "\n".join([
-                f"{CONFETTI_ICON if is_birthday_on_date(bday, today) else '・'} "
+                f"{'・'+ CONFETTI_ICON if is_birthday_on_date(bday, today) else ""} "
                 f"{interaction.guild.get_member(int(uid)).display_name if interaction.guild.get_member(int(uid)) else f'<@{uid}>'} - {format_birthday_display(bday)}"
                 for uid, bday in first_page
             ])

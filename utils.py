@@ -8,7 +8,7 @@ from logger import logger
 from discord.ui import View, Button
 
 MAX_PINNED_ENTRIES = 20  # Show first 20 in pinned message
-CONFETTI_ICON = "🎉"
+CONFETTI_ICON = "🎉 "
 
 
 def parse_day_month_input(day_input, month_input):
