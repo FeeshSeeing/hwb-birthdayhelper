@@ -7,6 +7,7 @@ import datetime as dt
 
 CONFETTI_ICON = "🎉 "
 ENTRIES_PER_PAGE = 20
+BOT_BIRTHDAY = 9  # September 9th, for fun message
 
 # ----------------- Setup Check -----------------
 async def ensure_setup(interaction: discord.Interaction) -> bool:
@@ -32,7 +33,11 @@ class Birthdays(commands.Cog):
             try:
                 birthdays = await self.bot.db.get_birthdays(guild.id)
                 today = dt.datetime.now(dt.timezone.utc)
-                birthdays_today = [uid for uid, bday in birthdays if is_birthday_on_date(bday, today)]
+                birthdays_today = [
+                    uid for uid, bday in birthdays 
+                    if is_birthday_on_date(bday, today)
+                    and (member := guild.get_member(uid)) and not member.bot
+                ]
                 await update_pinned_birthday_message(
                     guild,
                     db=self.bot.db,
@@ -51,6 +56,16 @@ class Birthdays(commands.Cog):
     async def setbirthday(self, interaction: discord.Interaction, day: int, month: int):
         if not await ensure_setup(interaction):
             return
+
+        # Prevent bot from being set
+        if interaction.user.bot:
+            await interaction.response.send_message(
+                f"🤖 Nice try! I’m a bot, so I don’t have a birthday… "
+                f"but I *was created on {BOT_BIRTHDAY}th September*! 🎉\nThanks for caring! 😄",
+                ephemeral=True
+            )
+            return
+
         await interaction.response.defer(ephemeral=True)
         result = parse_day_month_input(day, month)
         if not result:
@@ -64,7 +79,11 @@ class Birthdays(commands.Cog):
             await self.bot.db.set_birthday(interaction.guild.id, interaction.user.id, birthday_str)
             all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
+            birthdays_today = [
+                uid for uid, bday in all_birthdays 
+                if is_birthday_on_date(bday, today)
+                and (member := interaction.guild.get_member(uid)) and not member.bot
+            ]
             await update_pinned_birthday_message(
                 interaction.guild,
                 db=self.bot.db,
@@ -90,7 +109,11 @@ class Birthdays(commands.Cog):
             await self.bot.db.delete_birthday(interaction.guild.id, interaction.user.id)
             all_birthdays = await self.bot.db.get_birthdays(interaction.guild.id)
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [uid for uid, bday in all_birthdays if is_birthday_on_date(bday, today)]
+            birthdays_today = [
+                uid for uid, bday in all_birthdays 
+                if is_birthday_on_date(bday, today)
+                and (member := interaction.guild.get_member(uid)) and not member.bot
+            ]
             await update_pinned_birthday_message(
                 interaction.guild,
                 db=self.bot.db,
@@ -116,7 +139,11 @@ class Birthdays(commands.Cog):
                 return
 
             today = dt.datetime.now(dt.timezone.utc)
-            birthdays_today = [uid for uid, bday in birthdays if is_birthday_on_date(bday, today)]
+            birthdays_today = [
+                uid for uid, bday in birthdays 
+                if is_birthday_on_date(bday, today)
+                and (member := interaction.guild.get_member(uid)) and not member.bot
+            ]
             await update_pinned_birthday_message(
                 interaction.guild,
                 db=self.bot.db,
@@ -127,18 +154,14 @@ class Birthdays(commands.Cog):
             # Sort upcoming birthdays
             def upcoming_sort_key(b):
                 month, day = map(int, b[1].split("-"))
-
-                # Adjust Feb 29 on non-leap years
                 try:
                     current = dt.datetime(today.year, month, day, tzinfo=dt.timezone.utc)
                 except ValueError:
                     if month == 2 and day == 29:
                         current = dt.datetime(today.year, 2, 28, tzinfo=dt.timezone.utc)
                     else:
-                        # Log invalid birthdays and skip them
                         logger.warning(f"Invalid birthday {b[1]} for user {b[0]}")
-                        return float("inf")  # Push invalid birthdays to the end
-
+                        return float("inf")
                 if current < today and not is_birthday_on_date(b[1], today):
                     try:
                         current = dt.datetime(today.year + 1, month, day, tzinfo=dt.timezone.utc)
@@ -147,7 +170,6 @@ class Birthdays(commands.Cog):
                             current = dt.datetime(today.year + 1, 2, 28, tzinfo=dt.timezone.utc)
                         else:
                             return float("inf")
-
                 return (current - today).total_seconds()
 
             birthdays_sorted = sorted(birthdays, key=upcoming_sort_key)
@@ -158,16 +180,13 @@ class Birthdays(commands.Cog):
 
             lines = []
             for uid, bday in first_page:
-                member = interaction.guild.get_member(uid)
-                if member:
-                    display_name = member.display_name  # Friendly nickname if they have one
-                else:
-                    # Try to fetch member from API if not in cache (optional)
-                    try:
-                        member = await interaction.guild.fetch_member(uid)
-                        display_name = member.display_name
-                    except discord.NotFound:
-                        display_name = f"User {uid}"  # Generic fallback
+                try:
+                    member = interaction.guild.get_member(uid) or await interaction.guild.fetch_member(uid)
+                    if member.bot:
+                        continue  # Skip bot
+                    display_name = member.display_name
+                except discord.NotFound:
+                    display_name = f"User {uid}"
                 prefix = "・"
                 if is_birthday_on_date(bday, today):
                     prefix += CONFETTI_ICON
