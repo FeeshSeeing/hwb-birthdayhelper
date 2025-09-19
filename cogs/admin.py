@@ -5,6 +5,7 @@ from discord.ui import View, Button
 from utils import parse_day_month_input, format_birthday_display, update_pinned_birthday_message, is_birthday_on_date
 from logger import logger
 import datetime as dt
+BOT_BIRTHDAY = 9  # September 9th, for fun message
 
 # ---------------- Admin/Mod Utilities ----------------
 def is_admin_or_mod(member: discord.Member, mod_role_id: int | str | None = None) -> bool:
@@ -40,6 +41,14 @@ class Admin(commands.Cog):
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.describe(user="User", day="Day", month="Month")
     async def setuserbirthday(self, interaction: "discord.Interaction", user: discord.Member, day: int, month: int):
+        if user.bot:
+            # Only show an ephemeral message; do not add to DB or pinned message
+            await interaction.response.send_message(
+                f"🤖 Nice try! I'm a bot, so I don't have a birthday… "
+                f"but I *was created on {BOT_BIRTHDAY}th September*! 🎉\nThanks for caring! 😄",
+                ephemeral=True
+            )
+            return
         if not await ensure_setup(interaction, self.bot.db):
             return
 

@@ -60,7 +60,7 @@ class Birthdays(commands.Cog):
         # Prevent bot from being set
         if interaction.user.bot:
             await interaction.response.send_message(
-                f"🤖 Nice try! I’m a bot, so I don’t have a birthday… "
+                f"🤖 Nice try! I'm a bot, so I don't have a birthday… "
                 f"but I *was created on {BOT_BIRTHDAY}th September*! 🎉\nThanks for caring! 😄",
                 ephemeral=True
             )
