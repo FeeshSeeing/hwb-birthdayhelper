@@ -95,6 +95,16 @@ class BirthdayBot(commands.Bot):
         logger.info(f"🎉 Serving guilds: {guild_names if guild_names else 'No guilds connected'}")
         logger.info("=" * 50)
 
+    async def on_connect(self):
+        logger.info("🔌 Connected to Discord Gateway.")
+
+    async def on_disconnect(self):
+        logger.warning("⚠️ Disconnected from Discord Gateway. Attempting to reconnect...")
+
+    async def on_resumed(self):
+        logger.info("🔄 Successfully resumed session with Discord (no data loss).")
+
+
 # --- Main Entry Point ---
 async def main():
     bot = BirthdayBot()
