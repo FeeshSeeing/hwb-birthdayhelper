@@ -18,7 +18,8 @@ COGS_TO_LOAD = [
     "cogs.setup_cog",
     "cogs.testdate",
     "cogs.debug_cog",
-    "cogs.member_cleanup"
+    "cogs.member_cleanup",
+    "cogs.help"
 ]
 
 class BirthdayBot(commands.Bot):
