@@ -1,24 +1,19 @@
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from utils import parse_day_month_input, format_birthday_display, update_pinned_birthday_message, is_birthday_on_date
+from utils import (
+    parse_day_month_input,
+    format_birthday_display,
+    update_pinned_birthday_message,
+    is_birthday_on_date,
+    ensure_setup  # ✅ Use centralized version
+)
 from logger import logger
 import datetime as dt
 
 CONFETTI_ICON = "🎉 "
 ENTRIES_PER_PAGE = 20
 BOT_BIRTHDAY = 9  # September 9th, for fun message
-
-# ----------------- Setup Check -----------------
-async def ensure_setup(interaction: discord.Interaction) -> bool:
-    guild_config = await interaction.client.db.get_guild_config(interaction.guild.id)
-    if not guild_config:
-        await interaction.response.send_message(
-            "❗ Please run `/setup` first to configure HWB-BirthdayHelper for this server!",
-            ephemeral=True
-        )
-        return False
-    return True
 
 # ---------------- Birthday Commands ----------------
 class Birthdays(commands.Cog):
@@ -54,7 +49,7 @@ class Birthdays(commands.Cog):
     @app_commands.command(name="setbirthday", description="Set your birthday (day then month)")
     @app_commands.describe(day="Day of birthday", month="Month of birthday")
     async def setbirthday(self, interaction: discord.Interaction, day: int, month: int):
-        if not await ensure_setup(interaction):
+        if not await ensure_setup(interaction, self.bot.db):
             return
 
         # Prevent bot from being set
@@ -101,7 +96,7 @@ class Birthdays(commands.Cog):
 
     @app_commands.command(name="deletebirthday", description="Delete your birthday")
     async def deletebirthday(self, interaction: discord.Interaction):
-        if not await ensure_setup(interaction):
+        if not await ensure_setup(interaction, self.bot.db):
             return
         await interaction.response.defer(ephemeral=True)
 
@@ -128,7 +123,7 @@ class Birthdays(commands.Cog):
 
     @app_commands.command(name="viewbirthdays", description="View upcoming birthdays (first 20)")
     async def viewbirthdays(self, interaction: discord.Interaction):
-        if not await ensure_setup(interaction):
+        if not await ensure_setup(interaction, self.bot.db):
             return
         await interaction.response.defer(ephemeral=True)
 

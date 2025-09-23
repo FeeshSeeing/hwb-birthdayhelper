@@ -221,3 +221,47 @@ async def update_pinned_birthday_message(
         await db.db.commit()
 
     return pinned_msg
+
+
+# ---------------- Ensure Setup ----------------
+async def ensure_setup(interaction: discord.Interaction, db=None) -> bool:
+    """
+    Ensure the command is used in a guild and that the guild has a valid configuration.
+
+    Returns:
+        bool: True if the guild is ready, False otherwise.
+    """
+
+    # 1️- Prevent using commands in DMs
+    if interaction.guild is None:
+        try:
+            await interaction.response.send_message(
+                "📬 **Hey there!**\n"
+                "I can only work inside servers\n"
+                "Try running this command in one of your servers where I'm installed.",
+                ephemeral=True
+            )
+        except Exception as e:
+            logger.error(f"Failed to send DM-block message: {e}", exc_info=True)
+        return False
+
+    # 2️- Use provided DB or fallback to bot.db
+    db = db or getattr(interaction.client, "db", None)
+    if db is None:
+        logger.error("No database instance available for ensure_setup()")
+        return False
+
+    # 3️- Check if the server is configured
+    guild_config = await db.get_guild_config(interaction.guild.id)
+    if not guild_config:
+        try:
+            await interaction.response.send_message(
+                "❗ This server hasn't been set up yet.\n"
+                "Ask an admin to run `/setup` so I can start tracking birthdays. 🥳",
+                ephemeral=True
+            )
+        except Exception as e:
+            logger.error(f"Failed to send setup prompt: {e}", exc_info=True)
+        return False
+
+    return True

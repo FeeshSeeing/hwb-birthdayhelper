@@ -2,9 +2,16 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Button
-from utils import parse_day_month_input, format_birthday_display, update_pinned_birthday_message, is_birthday_on_date
+from utils import (
+    parse_day_month_input,
+    format_birthday_display,
+    update_pinned_birthday_message,
+    is_birthday_on_date,
+    ensure_setup  # ✅ Use centralized version
+)
 from logger import logger
 import datetime as dt
+
 BOT_BIRTHDAY = 9  # September 9th, for fun message
 
 # ---------------- Admin/Mod Utilities ----------------
@@ -20,16 +27,6 @@ def is_admin_or_mod(member: discord.Member, mod_role_id: int | str | None = None
         return any(role.id == mod_role_id for role in member.roles)
     return False
 
-async def ensure_setup(interaction: "discord.Interaction", db) -> bool:
-    """Ensure guild has setup; if missing, notify user."""
-    guild_config = await db.get_guild_config(interaction.guild.id)
-    if not guild_config:
-        await interaction.response.send_message(
-            "❗ This server has no configuration. Please run `/setup` first to configure HWB-BirthdayHelper.",
-            ephemeral=True
-        )
-        return False
-    return True
 
 # ---------------- Admin Cog ----------------
 class Admin(commands.Cog):
@@ -42,13 +39,13 @@ class Admin(commands.Cog):
     @app_commands.describe(user="User", day="Day", month="Month")
     async def setuserbirthday(self, interaction: "discord.Interaction", user: discord.Member, day: int, month: int):
         if user.bot:
-            # Only show an ephemeral message; do not add to DB or pinned message
             await interaction.response.send_message(
                 f"🤖 Nice try! I'm a bot, so I don't have a birthday… "
                 f"but I *was created on {BOT_BIRTHDAY}th September*! 🎉\nThanks for caring! 😄",
                 ephemeral=True
             )
             return
+
         if not await ensure_setup(interaction, self.bot.db):
             return
 

@@ -5,21 +5,7 @@ import datetime as dt
 from tasks import run_birthday_check_once
 from .admin import is_admin_or_mod  # Relative import
 from logger import logger
-
-# -------------------- Helpers --------------------
-async def ensure_setup(interaction: "discord.Interaction", db) -> bool:
-    """Check if the guild has a config setup."""
-    guild_config = await db.get_guild_config(interaction.guild.id)
-    if not guild_config:
-        try:
-            await interaction.response.send_message(
-                "❗ Please run `/setup` first to configure HWB-BirthdayHelper for this server!",
-                ephemeral=True
-            )
-        except Exception as e:
-            logger.error(f"Failed to send setup prompt: {e}", exc_info=True)
-        return False
-    return True
+from utils import ensure_setup  # ✅ Use centralized version
 
 # -------------------- Cog --------------------
 class TestDateCog(commands.Cog):
@@ -32,7 +18,7 @@ class TestDateCog(commands.Cog):
     )
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.describe(date="Enter date in DD/MM/YYYY format")
-    async def testdate(self, interaction: "discord.Interaction", date: str):
+    async def testdate(self, interaction: discord.Interaction, date: str):
         try:
             if not await ensure_setup(interaction, self.bot.db):
                 return
