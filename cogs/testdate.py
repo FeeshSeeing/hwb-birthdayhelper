@@ -3,9 +3,9 @@ from discord import app_commands
 from discord.ext import commands
 import datetime as dt
 from tasks import run_birthday_check_once
-from .admin import is_admin_or_mod  # Relative import
+from .admin import is_admin_or_mod
 from logger import logger
-from utils import ensure_setup  # ✅ Use centralized version
+from utils import ensure_setup  # centralized version
 
 # -------------------- Cog --------------------
 class TestDateCog(commands.Cog):
@@ -28,7 +28,10 @@ class TestDateCog(commands.Cog):
                 await interaction.response.send_message(
                     "❗ You are not allowed to use this command.", ephemeral=True
                 )
-                logger.warning(f"Unauthorized access: {interaction.user.id} attempted testdate in {interaction.guild.id}")
+                logger.warning(
+                    f"Unauthorized access: user '{interaction.user.display_name}' (ID: {interaction.user.id}) "
+                    f"attempted /testdate in guild '{interaction.guild.name}' (ID: {interaction.guild.id})"
+                )
                 return
 
             await interaction.response.defer(ephemeral=True)
@@ -48,7 +51,10 @@ class TestDateCog(commands.Cog):
                     await interaction.followup.send(
                         "❗ Invalid date format. Use DD/MM/YYYY.", ephemeral=True
                     )
-                    logger.warning(f"Invalid date '{date}' from {interaction.user.id} in {interaction.guild.id}")
+                    logger.warning(
+                        f"Invalid date '{date}' from user '{interaction.user.display_name}' "
+                        f"(ID: {interaction.user.id}) in guild '{interaction.guild.name}' (ID: {interaction.guild.id})"
+                    )
                     return
             except Exception as e:
                 await interaction.followup.send(
@@ -69,12 +75,20 @@ class TestDateCog(commands.Cog):
                     f"✅ Birthday check run for {test_date.strftime('%d/%m/%Y')} (UTC). Check the birthday channel.",
                     ephemeral=True
                 )
-                logger.info(f"Test birthday check run for {date} in guild {interaction.guild.id} by {interaction.user.id}")
+                logger.info(
+                    f"Test birthday check run for {date} in guild '{interaction.guild.name}' "
+                    f"(ID: {interaction.guild.id}) by user '{interaction.user.display_name}' "
+                    f"(ID: {interaction.user.id})"
+                )
             except Exception as e:
                 await interaction.followup.send(
                     f"🚨 An error occurred while running the birthday check: {e}", ephemeral=True
                 )
-                logger.error(f"Error running birthday check once for guild {interaction.guild.id} with date {date} by {interaction.user.id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error running birthday check once for guild '{interaction.guild.name}' "
+                    f"(ID: {interaction.guild.id}) with date {date} "
+                    f"by user '{interaction.user.display_name}' (ID: {interaction.user.id}): {e}", exc_info=True
+                )
 
         except Exception as e:
             try:
